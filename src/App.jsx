@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { supabase } from "./lib/supabase";
 
 // ─── FONTS & GLOBAL STYLES ───────────────────────────────────────────────────
 const GlobalStyles = () => (
@@ -35,6 +36,7 @@ const GlobalStyles = () => (
       from { opacity: 0; transform: scaleY(0.95); }
       to { opacity: 1; transform: scaleY(1); }
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .fade-up { animation: fadeUp 0.45s ease forwards; }
     .pop-in { animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
@@ -53,7 +55,6 @@ const GlobalStyles = () => (
     .tab-btn.active { color: #1A1A1A; }
 
     .search-result:active { background: #F0EDE8; }
-
     .add-method-btn:active { transform: scale(0.97); }
 
     .skeleton {
@@ -160,7 +161,6 @@ const FEED_POSTS = [
   { id: 5, user: "Ava Johnson", handle: "@avajbeauty", avatar: "AJ", avatarColor: "#A5B8C8", product: MOCK_PRODUCTS[3], time: "3h ago", likes: 55 },
 ];
 
-// Mock user profiles for Search
 const MOCK_USERS = [
   {
     id: "u1", name: "Sofia Reyes", handle: "@sofiabeauty",
@@ -227,79 +227,16 @@ const retailerBg = (r) => ({ Sephora: "#FFF0F6", Ulta: "#FFF0F8", Amazon: "#FFF8
 
 function ProductBottle({ product, size = 64, onClick, showLabel = true }) {
   return (
-    <div
-      className="product-slot"
-      onClick={onClick}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 4,
-        cursor: "pointer",
-        position: "relative",
-        width: size + 16,
-      }}
-    >
-      <div
-        style={{
-          width: size,
-          height: size * 1.4,
-          background: `linear-gradient(145deg, ${product.color}FF, ${product.color}99)`,
-          borderRadius: size * 0.18,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: `0 4px 12px ${product.color}66, inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -2px 4px rgba(0,0,0,0.1)`,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {/* Shine */}
-        <div style={{
-          position: "absolute", top: 0, left: "15%", width: "30%", height: "60%",
-          background: "linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 100%)",
-          borderRadius: "50%", transform: "skewX(-10deg)",
-        }} />
+    <div className="product-slot" onClick={onClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", position: "relative", width: size + 16 }}>
+      <div style={{ width: size, height: size * 1.4, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}99)`, borderRadius: size * 0.18, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 12px ${product.color}66, inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -2px 4px rgba(0,0,0,0.1)`, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, left: "15%", width: "30%", height: "60%", background: "linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 100%)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
         <span style={{ fontSize: size * 0.38, position: "relative", zIndex: 1 }}>{product.emoji}</span>
-        {/* Brand strip */}
-        <div style={{
-          position: "absolute", bottom: 0, left: 0, right: 0,
-          background: "rgba(0,0,0,0.15)",
-          padding: "3px 4px",
-          textAlign: "center",
-        }}>
-          <span style={{
-            fontSize: Math.max(7, size * 0.12),
-            fontFamily: "'DM Mono', monospace",
-            color: "rgba(255,255,255,0.9)",
-            fontWeight: 500,
-            letterSpacing: "0.04em",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            display: "block",
-          }}>{product.brand.split(" ")[0].toUpperCase()}</span>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.15)", padding: "3px 4px", textAlign: "center" }}>
+          <span style={{ fontSize: Math.max(7, size * 0.12), fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,0.9)", fontWeight: 500, letterSpacing: "0.04em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{product.brand.split(" ")[0].toUpperCase()}</span>
         </div>
       </div>
       {showLabel && (
-        <div
-          className="product-label"
-          style={{
-            fontSize: 10,
-            color: "#555",
-            textAlign: "center",
-            lineHeight: 1.3,
-            maxWidth: size + 16,
-            overflow: "hidden",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            fontFamily: "'Jost', sans-serif",
-            fontWeight: 400,
-            opacity: 0.85,
-          }}
-        >
+        <div className="product-label" style={{ fontSize: 10, color: "#555", textAlign: "center", lineHeight: 1.3, maxWidth: size + 16, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", fontFamily: "'Jost', sans-serif", fontWeight: 400, opacity: 0.85 }}>
           {product.name.length > 22 ? product.name.slice(0, 22) + "…" : product.name}
         </div>
       )}
@@ -313,17 +250,7 @@ function ShelfRow({ products, theme, onProductClick, onAddClick, rowIndex }) {
   const slots = [products[0], products[1], products[2]];
   return (
     <div style={{ marginBottom: 0, animationDelay: `${rowIndex * 0.08}s` }} className="fade-up">
-      {/* Products on shelf */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-around",
-        alignItems: "flex-end",
-        padding: "14px 20px 0",
-        minHeight: 120,
-        background: theme.mirrorBg,
-        position: "relative",
-      }}>
-        {/* Back wall reflection lines for glass/mirror */}
+      <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "14px 20px 0", minHeight: 120, background: theme.mirrorBg, position: "relative" }}>
         {(theme.id === "glass" || theme.id === "mirror") && (
           <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(255,255,255,0.08) 30px, rgba(255,255,255,0.08) 31px)", pointerEvents: "none" }} />
         )}
@@ -332,34 +259,13 @@ function ShelfRow({ products, theme, onProductClick, onAddClick, rowIndex }) {
             {product ? (
               <ProductBottle product={product} size={62} onClick={() => onProductClick(product)} />
             ) : (
-              <div
-                onClick={onAddClick}
-                style={{
-                  width: 62, height: 87,
-                  border: "2px dashed rgba(0,0,0,0.12)",
-                  borderRadius: 11,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", color: "rgba(0,0,0,0.2)", fontSize: 22,
-                  transition: "all 0.2s",
-                }}
-              >+</div>
+              <div onClick={onAddClick} style={{ width: 62, height: 87, border: "2px dashed rgba(0,0,0,0.12)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(0,0,0,0.2)", fontSize: 22, transition: "all 0.2s" }}>+</div>
             )}
           </div>
         ))}
       </div>
-      {/* Shelf plank */}
-      <div style={{
-        height: 14,
-        background: theme.shelfBg,
-        boxShadow: theme.shelfShadow,
-        position: "relative",
-        zIndex: 2,
-      }}>
-        {/* Shelf edge highlight */}
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: "rgba(255,255,255,0.35)",
-        }} />
+      <div style={{ height: 14, background: theme.shelfBg, boxShadow: theme.shelfShadow, position: "relative", zIndex: 2 }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "rgba(255,255,255,0.35)" }} />
       </div>
     </div>
   );
@@ -372,43 +278,15 @@ function MedicineCabinet({ products, theme, onProductClick, onAddClick }) {
   for (let i = 0; i < Math.max(4, Math.ceil(products.length / 3) + 1); i++) {
     rows.push(products.slice(i * 3, i * 3 + 3));
   }
-
   return (
-    <div className="cabinet-reveal" style={{
-      background: theme.cabinetBg,
-      border: `6px solid ${theme.cabinetBorder}`,
-      borderRadius: 16,
-      overflow: "hidden",
-      boxShadow: `0 20px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1)`,
-      margin: "0 16px",
-    }}>
-      {/* Cabinet top edge */}
-      <div style={{
-        height: 10,
-        background: theme.edgeBg,
-        borderBottom: `2px solid ${theme.cabinetBorder}`,
-      }} />
-
-      {/* Shelves */}
+    <div className="cabinet-reveal" style={{ background: theme.cabinetBg, border: `6px solid ${theme.cabinetBorder}`, borderRadius: 16, overflow: "hidden", boxShadow: `0 20px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1)`, margin: "0 16px" }}>
+      <div style={{ height: 10, background: theme.edgeBg, borderBottom: `2px solid ${theme.cabinetBorder}` }} />
       <div style={{ overflow: "hidden" }}>
         {rows.map((row, i) => (
-          <ShelfRow
-            key={i}
-            products={row}
-            theme={theme}
-            onProductClick={onProductClick}
-            onAddClick={onAddClick}
-            rowIndex={i}
-          />
+          <ShelfRow key={i} products={row} theme={theme} onProductClick={onProductClick} onAddClick={onAddClick} rowIndex={i} />
         ))}
       </div>
-
-      {/* Cabinet bottom edge */}
-      <div style={{
-        height: 10,
-        background: theme.edgeBg,
-        borderTop: `2px solid ${theme.cabinetBorder}`,
-      }} />
+      <div style={{ height: 10, background: theme.edgeBg, borderTop: `2px solid ${theme.cabinetBorder}` }} />
     </div>
   );
 }
@@ -418,29 +296,11 @@ function MedicineCabinet({ products, theme, onProductClick, onAddClick }) {
 function ProductModal({ product, onClose }) {
   if (!product) return null;
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)",
-      display: "flex", alignItems: "flex-end",
-    }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="slide-up-modal" style={{
-        width: "100%", maxWidth: 480, margin: "0 auto",
-        background: "#FDFAF7", borderRadius: "24px 24px 0 0",
-        padding: "28px 24px 48px",
-        animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)",
-      }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", padding: "28px 24px 48px", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)" }}>
         <div style={{ width: 40, height: 4, background: "#E0DAD2", borderRadius: 2, margin: "0 auto 24px" }} />
         <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 24 }}>
-          <div style={{
-            width: 90, height: 126,
-            background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`,
-            borderRadius: 16,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 40,
-            boxShadow: `0 8px 24px ${product.color}55`,
-            flexShrink: 0,
-            position: "relative", overflow: "hidden",
-          }}>
+          <div style={{ width: 90, height: 126, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, boxShadow: `0 8px 24px ${product.color}55`, flexShrink: 0, position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: 0, left: "15%", width: "30%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.5),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
             {product.emoji}
           </div>
@@ -469,7 +329,7 @@ function ProductModal({ product, onClose }) {
 // ─── ADD PRODUCT MODAL ───────────────────────────────────────────────────────
 
 function AddProductModal({ onClose, onAdd }) {
-  const [mode, setMode] = useState(null); // null | "search" | "email" | "barcode" | "browse"
+  const [mode, setMode] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -478,11 +338,7 @@ function AddProductModal({ onClose, onAdd }) {
   useEffect(() => {
     if (searchQuery.length > 1) {
       const q = searchQuery.toLowerCase();
-      setResults(SEARCH_DB.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q)
-      ).slice(0, 6));
+      setResults(SEARCH_DB.filter(p => p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)).slice(0, 6));
     } else {
       setResults([]);
     }
@@ -493,30 +349,15 @@ function AddProductModal({ onClose, onAdd }) {
     setTimeout(() => { onAdd(product); onClose(); }, 600);
   };
 
-  const browseProducts = selectedCategory
-    ? SEARCH_DB.filter(p => p.category === selectedCategory)
-    : [];
+  const browseProducts = selectedCategory ? SEARCH_DB.filter(p => p.category === selectedCategory) : [];
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)",
-      display: "flex", alignItems: "flex-end",
-    }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{
-        width: "100%", maxWidth: 480, margin: "0 auto",
-        background: "#FDFAF7", borderRadius: "24px 24px 0 0",
-        padding: "24px 20px 48px",
-        animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)",
-        maxHeight: "85vh", overflowY: "auto",
-      }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", padding: "24px 20px 48px", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ width: 40, height: 4, background: "#E0DAD2", borderRadius: 2, margin: "0 auto 20px" }} />
-
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div>
-            {mode && (
-              <button onClick={() => { setMode(null); setSearchQuery(""); setSelectedCategory(null); }} style={{ background: "none", border: "none", color: "#AAA", fontSize: 13, padding: 0, marginBottom: 2 }}>← back</button>
-            )}
+            {mode && <button onClick={() => { setMode(null); setSearchQuery(""); setSelectedCategory(null); }} style={{ background: "none", border: "none", color: "#AAA", fontSize: 13, padding: 0, marginBottom: 2 }}>← back</button>}
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A" }}>
               {!mode ? "Add to Cabinet" : mode === "search" ? "Search Products" : mode === "email" ? "Scan Email Receipts" : mode === "barcode" ? "Scan Barcode" : "Browse by Category"}
             </div>
@@ -524,7 +365,6 @@ function AddProductModal({ onClose, onAdd }) {
           <button onClick={onClose} style={{ background: "#F0EDE8", border: "none", borderRadius: "50%", width: 32, height: 32, fontSize: 16, color: "#888" }}>✕</button>
         </div>
 
-        {/* MODE SELECT */}
         {!mode && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[
@@ -533,17 +373,7 @@ function AddProductModal({ onClose, onAdd }) {
               { id: "barcode", icon: "📷", label: "Scan Barcode", sub: "Point at a product" },
               { id: "browse", icon: "✦", label: "Browse Category", sub: "Explore by type" },
             ].map(m => (
-              <button
-                key={m.id}
-                className="add-method-btn"
-                onClick={() => setMode(m.id)}
-                style={{
-                  background: "#F7F4F0", border: "1.5px solid #EDE9E3",
-                  borderRadius: 16, padding: "18px 14px",
-                  textAlign: "left", display: "flex", flexDirection: "column", gap: 8,
-                  transition: "all 0.2s",
-                }}
-              >
+              <button key={m.id} className="add-method-btn" onClick={() => setMode(m.id)} style={{ background: "#F7F4F0", border: "1.5px solid #EDE9E3", borderRadius: 16, padding: "18px 14px", textAlign: "left", display: "flex", flexDirection: "column", gap: 8, transition: "all 0.2s" }}>
                 <span style={{ fontSize: 28 }}>{m.icon}</span>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{m.label}</div>
@@ -554,53 +384,21 @@ function AddProductModal({ onClose, onAdd }) {
           </div>
         )}
 
-        {/* SEARCH MODE */}
         {mode === "search" && (
           <div>
             <div style={{ position: "relative", marginBottom: 16 }}>
-              <input
-                autoFocus
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search Laneige, Charlotte Tilbury…"
-                style={{
-                  width: "100%", padding: "14px 16px 14px 44px",
-                  background: "#F0EDE8", border: "1.5px solid #E5E0D8",
-                  borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontFamily: "'Jost', sans-serif",
-                }}
-              />
+              <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Laneige, Charlotte Tilbury…" style={{ width: "100%", padding: "14px 16px 14px 44px", background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontFamily: "'Jost', sans-serif" }} />
               <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 18 }}>🔍</span>
             </div>
-
-            {/* Retailer badges */}
             <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
               {["Sephora", "Ulta", "Amazon"].map(r => (
                 <span key={r} style={{ background: retailerBg(r), color: retailerColor(r), fontSize: 11, fontWeight: 600, padding: "5px 12px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{r}</span>
               ))}
             </div>
-
-            {results.length === 0 && searchQuery.length > 1 && (
-              <div style={{ textAlign: "center", padding: "30px 0", color: "#CCC", fontSize: 14 }}>No products found</div>
-            )}
-
+            {results.length === 0 && searchQuery.length > 1 && <div style={{ textAlign: "center", padding: "30px 0", color: "#CCC", fontSize: 14 }}>No products found</div>}
             {results.map(product => (
-              <div
-                key={product.id}
-                className="search-result"
-                onClick={() => handleAdd(product)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  padding: "12px 12px", borderRadius: 12, marginBottom: 6,
-                  cursor: "pointer", transition: "background 0.15s",
-                  border: "1.5px solid #EDE9E3",
-                }}
-              >
-                <div style={{
-                  width: 48, height: 66,
-                  background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`,
-                  borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 22, flexShrink: 0,
-                }}>{product.emoji}</div>
+              <div key={product.id} className="search-result" onClick={() => handleAdd(product)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 12px", borderRadius: 12, marginBottom: 6, cursor: "pointer", transition: "background 0.15s", border: "1.5px solid #EDE9E3" }}>
+                <div style={{ width: 48, height: 66, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{product.emoji}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A", marginBottom: 2 }}>{product.name}</div>
                   <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{product.brand} · {product.price}</div>
@@ -611,19 +409,13 @@ function AddProductModal({ onClose, onAdd }) {
           </div>
         )}
 
-        {/* EMAIL MODE */}
         {mode === "email" && (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>📬</div>
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: "#1A1A1A", marginBottom: 8 }}>Connect Your Email</div>
             <div style={{ fontSize: 14, color: "#AAA", lineHeight: 1.6, marginBottom: 28 }}>We'll scan for Sephora, Ulta, and Amazon beauty order confirmations and import them automatically.</div>
             {["Google", "Apple Mail", "Outlook"].map(provider => (
-              <button key={provider} style={{
-                width: "100%", padding: "14px", marginBottom: 10,
-                background: "#F0EDE8", border: "1.5px solid #E5E0D8",
-                borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontWeight: 500,
-                display: "flex", alignItems: "center", gap: 12,
-              }}>
+              <button key={provider} style={{ width: "100%", padding: "14px", marginBottom: 10, background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontWeight: 500, display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: 22 }}>{provider === "Google" ? "🔵" : provider === "Apple Mail" ? "🍎" : "📘"}</span>
                 Connect {provider}
               </button>
@@ -631,7 +423,6 @@ function AddProductModal({ onClose, onAdd }) {
           </div>
         )}
 
-        {/* BARCODE MODE */}
         {mode === "barcode" && (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
             <div style={{ width: "100%", aspectRatio: "4/3", background: "#1A1A1A", borderRadius: 16, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", marginBottom: 20, position: "relative", overflow: "hidden" }}>
@@ -644,21 +435,12 @@ function AddProductModal({ onClose, onAdd }) {
           </div>
         )}
 
-        {/* BROWSE MODE */}
         {mode === "browse" && (
           <div>
             {!selectedCategory ? (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                 {CATEGORIES.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
-                    style={{
-                      background: "#F7F4F0", border: "1.5px solid #EDE9E3",
-                      borderRadius: 14, padding: "16px 8px",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                    }}
-                  >
+                  <button key={cat.id} onClick={() => setSelectedCategory(cat.id)} style={{ background: "#F7F4F0", border: "1.5px solid #EDE9E3", borderRadius: 14, padding: "16px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                     <div style={{ width: 40, height: 40, background: cat.color + "44", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#555" }}>{cat.icon}</div>
                     <span style={{ fontSize: 11, fontWeight: 500, color: "#555", textAlign: "center" }}>{cat.label}</span>
                   </button>
@@ -668,16 +450,7 @@ function AddProductModal({ onClose, onAdd }) {
               <div>
                 <button onClick={() => setSelectedCategory(null)} style={{ background: "none", border: "none", color: "#AAA", fontSize: 13, marginBottom: 14, padding: 0 }}>← All Categories</button>
                 {browseProducts.map(product => (
-                  <div
-                    key={product.id}
-                    className="search-result"
-                    onClick={() => handleAdd(product)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 14,
-                      padding: "12px", borderRadius: 12, marginBottom: 6,
-                      cursor: "pointer", border: "1.5px solid #EDE9E3",
-                    }}
-                  >
+                  <div key={product.id} className="search-result" onClick={() => handleAdd(product)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px", borderRadius: 12, marginBottom: 6, cursor: "pointer", border: "1.5px solid #EDE9E3" }}>
                     <div style={{ width: 48, height: 66, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{product.emoji}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
@@ -706,40 +479,16 @@ function AddProductModal({ onClose, onAdd }) {
 
 function ThemePicker({ current, onSelect, onClose }) {
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)",
-      display: "flex", alignItems: "flex-end",
-    }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{
-        width: "100%", maxWidth: 480, margin: "0 auto",
-        background: "#FDFAF7", borderRadius: "24px 24px 0 0",
-        padding: "24px 20px 48px",
-        animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)",
-      }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", padding: "24px 20px 48px", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)" }}>
         <div style={{ width: 40, height: 4, background: "#E0DAD2", borderRadius: 2, margin: "0 auto 20px" }} />
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A", marginBottom: 20 }}>Cabinet Style</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {CABINET_THEMES.map(theme => (
-            <button
-              key={theme.id}
-              onClick={() => { onSelect(theme); onClose(); }}
-              style={{
-                background: theme.cabinetBg,
-                border: current.id === theme.id ? "3px solid #1A1A1A" : "2px solid transparent",
-                borderRadius: 16, padding: "16px 14px",
-                display: "flex", flexDirection: "column", gap: 8, cursor: "pointer",
-                position: "relative", overflow: "hidden",
-              }}
-            >
-              {current.id === theme.id && (
-                <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, background: "#1A1A1A", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#FFF" }}>✓</div>
-              )}
-              {/* Mini shelf preview */}
+            <button key={theme.id} onClick={() => { onSelect(theme); onClose(); }} style={{ background: theme.cabinetBg, border: current.id === theme.id ? "3px solid #1A1A1A" : "2px solid transparent", borderRadius: 16, padding: "16px 14px", display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", position: "relative", overflow: "hidden" }}>
+              {current.id === theme.id && <div style={{ position: "absolute", top: 8, right: 8, width: 20, height: 20, background: "#1A1A1A", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#FFF" }}>✓</div>}
               <div style={{ height: 32, background: theme.mirrorBg, borderRadius: 6, display: "flex", alignItems: "flex-end", padding: "4px 8px", gap: 6 }}>
-                {["💊","💄","🧴"].map((e,i) => (
-                  <div key={i} style={{ width: 16, height: 22, background: ["#FFB3C8","#D4A0A0","#B8D4E8"][i], borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8 }}>{e}</div>
-                ))}
+                {["💊","💄","🧴"].map((e,i) => <div key={i} style={{ width: 16, height: 22, background: ["#FFB3C8","#D4A0A0","#B8D4E8"][i], borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8 }}>{e}</div>)}
               </div>
               <div style={{ height: 6, background: theme.shelfBg, borderRadius: 2 }} />
               <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.9)", textAlign: "left", fontFamily: "'Jost', sans-serif" }}>{theme.label}</div>
@@ -756,43 +505,17 @@ function ThemePicker({ current, onSelect, onClose }) {
 function FeedPostCard({ post, index }) {
   const [liked, setLiked] = useState(false);
   return (
-    <div className="fade-up" style={{
-      background: "#FFF", borderRadius: 20,
-      border: "1.5px solid #EDE9E3",
-      padding: "18px", marginBottom: 12,
-      animationDelay: `${index * 0.07}s`, opacity: 0,
-    }}>
-      {/* User */}
+    <div className="fade-up" style={{ background: "#FFF", borderRadius: 20, border: "1.5px solid #EDE9E3", padding: "18px", marginBottom: 12, animationDelay: `${index * 0.07}s`, opacity: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: "50%",
-          background: post.avatarColor,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700, color: "#FFF",
-          flexShrink: 0,
-        }}>{post.avatar}</div>
+        <div style={{ width: 40, height: 40, borderRadius: "50%", background: post.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700, color: "#FFF", flexShrink: 0 }}>{post.avatar}</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#1A1A1A" }}>{post.user}</div>
           <div style={{ fontSize: 11, color: "#BBB", fontFamily: "'DM Mono', monospace" }}>{post.handle} · {post.time}</div>
         </div>
       </div>
-
-      {/* Action text */}
       <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontStyle: "italic" }}>added to their cabinet</div>
-
-      {/* Product preview */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 14,
-        background: "#F7F4F0", borderRadius: 14, padding: "14px",
-        marginBottom: 14,
-      }}>
-        <div style={{
-          width: 54, height: 76,
-          background: `linear-gradient(145deg, ${post.product.color}FF, ${post.product.color}88)`,
-          borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 26, flexShrink: 0,
-          boxShadow: `0 4px 12px ${post.product.color}44`,
-        }}>{post.product.emoji}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#F7F4F0", borderRadius: 14, padding: "14px", marginBottom: 14 }}>
+        <div style={{ width: 54, height: 76, background: `linear-gradient(145deg, ${post.product.color}FF, ${post.product.color}88)`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0, boxShadow: `0 4px 12px ${post.product.color}44` }}>{post.product.emoji}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 17, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{post.product.name}</div>
           <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>{post.product.brand}</div>
@@ -802,27 +525,13 @@ function FeedPostCard({ post, index }) {
           </div>
         </div>
       </div>
-
-      {/* Actions */}
       <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-        <button
-          onClick={() => setLiked(l => !l)}
-          style={{
-            background: "none", border: "none", padding: 0,
-            display: "flex", alignItems: "center", gap: 5,
-            color: liked ? "#D4006A" : "#CCC", fontSize: 14, fontWeight: 500,
-            transition: "all 0.2s",
-          }}
-        >
+        <button onClick={() => setLiked(l => !l)} style={{ background: "none", border: "none", padding: 0, display: "flex", alignItems: "center", gap: 5, color: liked ? "#D4006A" : "#CCC", fontSize: 14, fontWeight: 500, transition: "all 0.2s" }}>
           <span style={{ fontSize: 18, transform: liked ? "scale(1.2)" : "scale(1)", transition: "transform 0.2s cubic-bezier(0.34,1.56,0.64,1)", display: "block" }}>{liked ? "♥" : "♡"}</span>
           {post.likes + (liked ? 1 : 0)}
         </button>
-        <button style={{ background: "none", border: "none", padding: 0, color: "#CCC", fontSize: 14, display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 16 }}>💬</span> Comment
-        </button>
-        <button style={{ background: "none", border: "none", padding: 0, color: "#CCC", fontSize: 14, marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 16 }}>↗</span> Share
-        </button>
+        <button style={{ background: "none", border: "none", padding: 0, color: "#CCC", fontSize: 14, display: "flex", alignItems: "center", gap: 5 }}><span style={{ fontSize: 16 }}>💬</span> Comment</button>
+        <button style={{ background: "none", border: "none", padding: 0, color: "#CCC", fontSize: 14, marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}><span style={{ fontSize: 16 }}>↗</span> Share</button>
       </div>
     </div>
   );
@@ -837,7 +546,6 @@ function ProfileTab({ products, theme, onThemeChange, onAddProduct }) {
 
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
-      {/* Profile header */}
       <div style={{ padding: "20px 20px 16px", background: "#FDFAF7" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
           <div style={{ width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg, #D4A5A5, #A5B8C8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>ME</div>
@@ -845,55 +553,24 @@ function ProfileTab({ products, theme, onThemeChange, onAddProduct }) {
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A" }}>My Cabinet</div>
             <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{products.length} products · @myhandle</div>
           </div>
-          <button
-            onClick={() => setShowThemePicker(true)}
-            style={{
-              background: "#F0EDE8", border: "1.5px solid #E5E0D8",
-              borderRadius: 10, padding: "8px 12px", fontSize: 12,
-              fontWeight: 500, color: "#666", display: "flex", alignItems: "center", gap: 6,
-            }}
-          >
+          <button onClick={() => setShowThemePicker(true)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 500, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
             {theme.label} Style
           </button>
         </div>
-
-        {/* Category pills */}
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {CATEGORIES.map(cat => (
-            <div key={cat.id} style={{
-              background: cat.color + "33", borderRadius: 20,
-              padding: "5px 12px", fontSize: 11, fontWeight: 500, color: "#555",
-              whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0,
-            }}>
+            <div key={cat.id} style={{ background: cat.color + "33", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 500, color: "#555", whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
               {cat.label} · {products.filter(p => p.category === cat.id).length}
             </div>
           ))}
         </div>
       </div>
-
-      {/* Cabinet */}
-      <MedicineCabinet
-        products={products}
-        theme={theme}
-        onProductClick={setSelectedProduct}
-        onAddClick={() => setShowAddModal(true)}
-      />
-
-      {/* Add button */}
+      <MedicineCabinet products={products} theme={theme} onProductClick={setSelectedProduct} onAddClick={() => setShowAddModal(true)} />
       <div style={{ padding: "20px 20px 0" }}>
-        <button
-          onClick={() => setShowAddModal(true)}
-          style={{
-            width: "100%", padding: "16px",
-            background: "#1A1A1A", border: "none", borderRadius: 14,
-            color: "#FFF", fontSize: 15, fontWeight: 500,
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          }}
-        >
+        <button onClick={() => setShowAddModal(true)} style={{ width: "100%", padding: "16px", background: "#1A1A1A", border: "none", borderRadius: 14, color: "#FFF", fontSize: 15, fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           <span style={{ fontSize: 20 }}>＋</span> Add Product to Cabinet
         </button>
       </div>
-
       {showThemePicker && <ThemePicker current={theme} onSelect={onThemeChange} onClose={() => setShowThemePicker(false)} />}
       {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
       {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={p => { onAddProduct(p); }} />}
@@ -906,110 +583,52 @@ function ProfileTab({ products, theme, onThemeChange, onAddProduct }) {
 function FeedTab() {
   const [filter, setFilter] = useState("All");
   const filtered = filter === "All" ? FEED_POSTS : FEED_POSTS.filter(p => p.product.category === CATEGORIES.find(c => c.label === filter)?.id);
-
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
-      {/* Header */}
       <div style={{ padding: "20px 20px 0", background: "#FDFAF7", position: "sticky", top: 0, zIndex: 5, borderBottom: "1px solid #EDE9E3" }}>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>
-          cabinet<span style={{ fontStyle: "italic", color: "#C8B8A2" }}>.</span>
-        </div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>cabinet<span style={{ fontStyle: "italic", color: "#C8B8A2" }}>.</span></div>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 14 }}>
           {["All", ...CATEGORIES.map(c => c.label)].map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              style={{
-                background: filter === f ? "#1A1A1A" : "transparent",
-                border: `1.5px solid ${filter === f ? "#1A1A1A" : "#DDD"}`,
-                borderRadius: 20, padding: "6px 14px",
-                fontSize: 12, fontWeight: 500,
-                color: filter === f ? "#FFF" : "#888",
-                whiteSpace: "nowrap", flexShrink: 0,
-                transition: "all 0.2s",
-              }}
-            >{f}</button>
+            <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "#1A1A1A" : "transparent", border: `1.5px solid ${filter === f ? "#1A1A1A" : "#DDD"}`, borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: filter === f ? "#FFF" : "#888", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>{f}</button>
           ))}
         </div>
       </div>
-
       <div style={{ padding: "14px 16px 0" }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 0", color: "#CCC" }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>✦</div>
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18 }}>Nothing here yet</div>
           </div>
-        ) : (
-          filtered.map((post, i) => <FeedPostCard key={post.id} post={post} index={i} />)
-        )}
+        ) : filtered.map((post, i) => <FeedPostCard key={post.id} post={post} index={i} />)}
       </div>
     </div>
   );
 }
 
 // ─── USER PROFILE VIEW ───────────────────────────────────────────────────────
-// Shown when tapping a user from Search. Full-screen slide-over with their
-// cabinet + feed posts. onBack returns to Search results.
 
 function UserProfileView({ user, onBack }) {
-  const [tab, setTab] = useState("cabinet"); // "cabinet" | "posts"
+  const [tab, setTab] = useState("cabinet");
   const [following, setFollowing] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 80,
-      background: "#F7F5F2", display: "flex", flexDirection: "column",
-      maxWidth: 480, margin: "0 auto",
-      animation: "slideUp 0.35s cubic-bezier(0.25,0.46,0.45,0.94)",
-    }}>
-      {/* Header bar */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "16px 20px",
-        background: "rgba(247,245,242,0.96)", backdropFilter: "blur(12px)",
-        borderBottom: "1px solid #EDE9E3", flexShrink: 0,
-      }}>
-        <button
-          onClick={onBack}
-          style={{ background: "#F0EDE8", border: "none", borderRadius: "50%", width: 36, height: 36, fontSize: 18, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-        >←</button>
+    <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "#F7F5F2", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", animation: "slideUp 0.35s cubic-bezier(0.25,0.46,0.45,0.94)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", background: "rgba(247,245,242,0.96)", backdropFilter: "blur(12px)", borderBottom: "1px solid #EDE9E3", flexShrink: 0 }}>
+        <button onClick={onBack} style={{ background: "#F0EDE8", border: "none", borderRadius: "50%", width: 36, height: 36, fontSize: 18, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.1 }}>{user.name}</div>
           <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{user.handle}</div>
         </div>
-        <button
-          onClick={() => setFollowing(f => !f)}
-          style={{
-            background: following ? "#F0EDE8" : "#1A1A1A",
-            border: "none", borderRadius: 20,
-            padding: "8px 18px", fontSize: 13, fontWeight: 500,
-            color: following ? "#666" : "#FFF",
-            transition: "all 0.2s",
-            flexShrink: 0,
-          }}
-        >{following ? "Following" : "Follow"}</button>
+        <button onClick={() => setFollowing(f => !f)} style={{ background: following ? "#F0EDE8" : "#1A1A1A", border: "none", borderRadius: 20, padding: "8px 18px", fontSize: 13, fontWeight: 500, color: following ? "#666" : "#FFF", transition: "all 0.2s", flexShrink: 0 }}>{following ? "Following" : "Follow"}</button>
       </div>
-
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
-        {/* Profile hero */}
         <div style={{ padding: "24px 20px 0" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
-            <div style={{
-              width: 64, height: 64, borderRadius: "50%",
-              background: user.avatarColor,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.1)", flexShrink: 0,
-            }}>{user.avatar}</div>
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: user.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.1)", flexShrink: 0 }}>{user.avatar}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: "#888", lineHeight: 1.5, marginBottom: 12 }}>{user.bio}</div>
               <div style={{ display: "flex", gap: 20 }}>
-                {[
-                  { label: "products", val: user.products.length },
-                  { label: "followers", val: user.followers.toLocaleString() },
-                  { label: "following", val: user.following },
-                ].map(s => (
+                {[{ label: "products", val: user.products.length }, { label: "followers", val: user.followers.toLocaleString() }, { label: "following", val: user.following }].map(s => (
                   <div key={s.label}>
                     <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{s.val}</div>
                     <div style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{s.label}</div>
@@ -1018,51 +637,26 @@ function UserProfileView({ user, onBack }) {
               </div>
             </div>
           </div>
-
-          {/* Tab switcher */}
           <div style={{ display: "flex", gap: 0, borderBottom: "1.5px solid #EDE9E3", marginBottom: 20 }}>
             {[{ id: "cabinet", label: "🪞 Cabinet" }, { id: "posts", label: "⚡ Posts" }].map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{
-                  flex: 1, background: "none", border: "none",
-                  padding: "10px 0", fontSize: 13, fontWeight: 500,
-                  color: tab === t.id ? "#1A1A1A" : "#BBB",
-                  borderBottom: tab === t.id ? "2px solid #1A1A1A" : "2px solid transparent",
-                  marginBottom: -1.5, transition: "all 0.2s",
-                }}
-              >{t.label}</button>
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: "none", border: "none", padding: "10px 0", fontSize: 13, fontWeight: 500, color: tab === t.id ? "#1A1A1A" : "#BBB", borderBottom: tab === t.id ? "2px solid #1A1A1A" : "2px solid transparent", marginBottom: -1.5, transition: "all 0.2s" }}>{t.label}</button>
             ))}
           </div>
         </div>
-
-        {/* Cabinet view */}
         {tab === "cabinet" && (
           <div>
-            <MedicineCabinet
-              products={user.products}
-              theme={user.cabinetTheme}
-              onProductClick={setSelectedProduct}
-              onAddClick={() => {}}
-            />
+            <MedicineCabinet products={user.products} theme={user.cabinetTheme} onProductClick={setSelectedProduct} onAddClick={() => {}} />
             <div style={{ padding: "12px 20px" }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {CATEGORIES.map(cat => {
                   const count = user.products.filter(p => p.category === cat.id).length;
                   if (!count) return null;
-                  return (
-                    <span key={cat.id} style={{ background: cat.color + "33", borderRadius: 20, padding: "4px 10px", fontSize: 11, color: "#666", fontFamily: "'DM Mono', monospace" }}>
-                      {cat.label} · {count}
-                    </span>
-                  );
+                  return <span key={cat.id} style={{ background: cat.color + "33", borderRadius: 20, padding: "4px 10px", fontSize: 11, color: "#666", fontFamily: "'DM Mono', monospace" }}>{cat.label} · {count}</span>;
                 })}
               </div>
             </div>
           </div>
         )}
-
-        {/* Posts view */}
         {tab === "posts" && (
           <div style={{ padding: "0 16px" }}>
             {user.posts.length === 0 ? (
@@ -1070,19 +664,10 @@ function UserProfileView({ user, onBack }) {
                 <div style={{ fontSize: 32, marginBottom: 8 }}>✦</div>
                 <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 16 }}>No posts yet</div>
               </div>
-            ) : (
-              user.posts.map((post, i) => (
-                <FeedPostCard
-                  key={post.id}
-                  post={{ ...post, user: user.name, handle: user.handle, avatar: user.avatar, avatarColor: user.avatarColor }}
-                  index={i}
-                />
-              ))
-            )}
+            ) : user.posts.map((post, i) => <FeedPostCard key={post.id} post={{ ...post, user: user.name, handle: user.handle, avatar: user.avatar, avatarColor: user.avatarColor }} index={i} />)}
           </div>
         )}
       </div>
-
       {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
     </div>
   );
@@ -1091,145 +676,53 @@ function UserProfileView({ user, onBack }) {
 // ─── SEARCH TAB ──────────────────────────────────────────────────────────────
 
 function SearchTab() {
-  const [query, setQuery]             = useState("");
-  const [activeFilter, setActiveFilter] = useState("all"); // all | people | products | topics
+  const [query, setQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
   const inputRef = useRef(null);
-
-  // Derived results
   const q = query.toLowerCase().trim();
-
-  const userResults = q.length > 0
-    ? MOCK_USERS.filter(u =>
-        u.name.toLowerCase().includes(q) ||
-        u.handle.toLowerCase().includes(q) ||
-        u.bio.toLowerCase().includes(q)
-      )
-    : [];
-
-  const productResults = q.length > 0
-    ? SEARCH_DB.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q)
-      ).slice(0, 6)
-    : [];
-
-  const topicResults = q.length > 0
-    ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q))
-    : [];
-
+  const userResults = q.length > 0 ? MOCK_USERS.filter(u => u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q) || u.bio.toLowerCase().includes(q)) : [];
+  const productResults = q.length > 0 ? SEARCH_DB.filter(p => p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q)).slice(0, 6) : [];
+  const topicResults = q.length > 0 ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : [];
   const hasResults = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
-
-  // Section visibility based on filter
-  const showPeople   = activeFilter === "all" || activeFilter === "people";
+  const showPeople = activeFilter === "all" || activeFilter === "people";
   const showProducts = activeFilter === "all" || activeFilter === "products";
-  const showTopics   = activeFilter === "all" || activeFilter === "topics";
+  const showTopics = activeFilter === "all" || activeFilter === "topics";
 
-  if (selectedUser) {
-    return <UserProfileView user={selectedUser} onBack={() => setSelectedUser(null)} />;
-  }
+  if (selectedUser) return <UserProfileView user={selectedUser} onBack={() => setSelectedUser(null)} />;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Sticky search header */}
-      <div style={{
-        padding: "20px 16px 0",
-        background: "#F7F5F2",
-        flexShrink: 0,
-      }}>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>
-          Search
-        </div>
-
-        {/* Search input */}
+      <div style={{ padding: "20px 16px 0", background: "#F7F5F2", flexShrink: 0 }}>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>Search</div>
         <div style={{ position: "relative", marginBottom: 12 }}>
           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 17, pointerEvents: "none" }}>🔍</span>
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="People, products, topics…"
-            style={{
-              width: "100%", padding: "13px 40px 13px 44px",
-              background: "#FFF", border: "1.5px solid #EDE9E3",
-              borderRadius: 14, fontSize: 15, color: "#1A1A1A",
-              fontFamily: "'Jost', sans-serif",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-              transition: "border-color 0.2s",
-            }}
-            onFocus={e => e.target.style.borderColor = "#C8B8A2"}
-            onBlur={e => e.target.style.borderColor = "#EDE9E3"}
-          />
-          {query.length > 0 && (
-            <button
-              onClick={() => setQuery("")}
-              style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "#E5E0D8", border: "none", borderRadius: "50%", width: 22, height: 22, fontSize: 12, color: "#888", display: "flex", alignItems: "center", justifyContent: "center" }}
-            >✕</button>
-          )}
+          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="People, products, topics…" style={{ width: "100%", padding: "13px 40px 13px 44px", background: "#FFF", border: "1.5px solid #EDE9E3", borderRadius: 14, fontSize: 15, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#C8B8A2"} onBlur={e => e.target.style.borderColor = "#EDE9E3"} />
+          {query.length > 0 && <button onClick={() => setQuery("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "#E5E0D8", border: "none", borderRadius: "50%", width: 22, height: 22, fontSize: 12, color: "#888", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>}
         </div>
-
-        {/* Filter pills — only show when there's a query */}
         {query.length > 0 && (
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 14 }}>
-            {[
-              { id: "all", label: "All" },
-              { id: "people", label: "👤 People" },
-              { id: "products", label: "✦ Products" },
-              { id: "topics", label: "◎ Topics" },
-            ].map(f => (
-              <button
-                key={f.id}
-                onClick={() => setActiveFilter(f.id)}
-                style={{
-                  background: activeFilter === f.id ? "#1A1A1A" : "transparent",
-                  border: `1.5px solid ${activeFilter === f.id ? "#1A1A1A" : "#DDD"}`,
-                  borderRadius: 20, padding: "5px 14px",
-                  fontSize: 12, fontWeight: 500,
-                  color: activeFilter === f.id ? "#FFF" : "#888",
-                  whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s",
-                }}
-              >{f.label}</button>
+            {[{ id: "all", label: "All" }, { id: "people", label: "👤 People" }, { id: "products", label: "✦ Products" }, { id: "topics", label: "◎ Topics" }].map(f => (
+              <button key={f.id} onClick={() => setActiveFilter(f.id)} style={{ background: activeFilter === f.id ? "#1A1A1A" : "transparent", border: `1.5px solid ${activeFilter === f.id ? "#1A1A1A" : "#DDD"}`, borderRadius: 20, padding: "5px 14px", fontSize: 12, fontWeight: 500, color: activeFilter === f.id ? "#FFF" : "#888", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>{f.label}</button>
             ))}
           </div>
         )}
       </div>
-
-      {/* Results / default state */}
       <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 100px" }}>
-
-        {/* Empty state — no query yet */}
         {query.length === 0 && (
           <div>
-            {/* Suggested friends */}
             <div style={{ paddingTop: 20 }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 14 }}>SUGGESTED CABINETS</div>
-              {MOCK_USERS.map((user, i) => (
-                <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />
-              ))}
+              {MOCK_USERS.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />)}
             </div>
-
-            {/* Topic pills */}
             <div style={{ marginTop: 24 }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 14 }}>BROWSE TOPICS</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {CATEGORIES.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setQuery(cat.label)}
-                    style={{
-                      background: cat.color + "28",
-                      border: `1.5px solid ${cat.color}66`,
-                      borderRadius: 20, padding: "8px 16px",
-                      fontSize: 13, fontWeight: 500, color: "#555",
-                    }}
-                  >{cat.icon} {cat.label}</button>
-                ))}
+                {CATEGORIES.map(cat => <button key={cat.id} onClick={() => setQuery(cat.label)} style={{ background: cat.color + "28", border: `1.5px solid ${cat.color}66`, borderRadius: 20, padding: "8px 16px", fontSize: 13, fontWeight: 500, color: "#555" }}>{cat.icon} {cat.label}</button>)}
               </div>
             </div>
           </div>
         )}
-
-        {/* Query results */}
         {query.length > 0 && !hasResults && (
           <div style={{ textAlign: "center", padding: "56px 0", color: "#CCC" }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>✦</div>
@@ -1237,32 +730,17 @@ function SearchTab() {
             <div style={{ fontSize: 13, color: "#CCC" }}>Try a product name, brand, or @handle</div>
           </div>
         )}
-
-        {/* People section */}
         {showPeople && userResults.length > 0 && (
           <div style={{ paddingTop: 20 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PEOPLE</div>
-            {userResults.map((user, i) => (
-              <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />
-            ))}
+            {userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />)}
           </div>
         )}
-
-        {/* Products section */}
         {showProducts && productResults.length > 0 && (
           <div style={{ paddingTop: 20 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PRODUCTS</div>
             {productResults.map((product, i) => (
-              <div
-                key={product.id}
-                className="fade-up"
-                style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  background: "#FFF", borderRadius: 14, padding: "12px",
-                  marginBottom: 8, border: "1.5px solid #EDE9E3",
-                  cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0,
-                }}
-              >
+              <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
                 <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{product.emoji}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
@@ -1273,22 +751,11 @@ function SearchTab() {
             ))}
           </div>
         )}
-
-        {/* Topics section */}
         {showTopics && topicResults.length > 0 && (
           <div style={{ paddingTop: 20 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>TOPICS</div>
             {topicResults.map((cat, i) => (
-              <div
-                key={cat.id}
-                className="fade-up"
-                style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  background: "#FFF", borderRadius: 14, padding: "14px 16px",
-                  marginBottom: 8, border: "1.5px solid #EDE9E3",
-                  cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0,
-                }}
-              >
+              <div key={cat.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "14px 16px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
                 <div style={{ width: 44, height: 44, borderRadius: "50%", background: cat.color + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{cat.icon}</div>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1A1A" }}>{cat.label}</div>
@@ -1304,60 +771,24 @@ function SearchTab() {
   );
 }
 
-// Reusable user row for search results and suggestions
 function UserRow({ user, index = 0, onTap }) {
   const [following, setFollowing] = useState(false);
   return (
-    <div
-      className="fade-up"
-      onClick={onTap}
-      style={{
-        display: "flex", alignItems: "center", gap: 12,
-        background: "#FFF", borderRadius: 16, padding: "13px 14px",
-        marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer",
-        animationDelay: `${index * 0.06}s`, opacity: 0,
-        transition: "background 0.15s",
-      }}
-    >
-      <div style={{
-        width: 46, height: 46, borderRadius: "50%", background: user.avatarColor,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "'DM Mono', monospace", fontSize: 14, fontWeight: 700, color: "#FFF",
-        flexShrink: 0,
-      }}>{user.avatar}</div>
-
-      {/* Cabinet style preview strip */}
-      <div style={{
-        width: 36, height: 46, borderRadius: 6, overflow: "hidden",
-        border: `2px solid ${user.cabinetTheme.cabinetBorder}`,
-        flexShrink: 0, background: user.cabinetTheme.cabinetBg,
-        display: "flex", flexDirection: "column",
-      }}>
+    <div className="fade-up" onClick={onTap} style={{ display: "flex", alignItems: "center", gap: 12, background: "#FFF", borderRadius: 16, padding: "13px 14px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${index * 0.06}s`, opacity: 0, transition: "background 0.15s" }}>
+      <div style={{ width: 46, height: 46, borderRadius: "50%", background: user.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 14, fontWeight: 700, color: "#FFF", flexShrink: 0 }}>{user.avatar}</div>
+      <div style={{ width: 36, height: 46, borderRadius: 6, overflow: "hidden", border: `2px solid ${user.cabinetTheme.cabinetBorder}`, flexShrink: 0, background: user.cabinetTheme.cabinetBg, display: "flex", flexDirection: "column" }}>
         {[0,1].map(r => (
           <div key={r} style={{ flex: 1, background: user.cabinetTheme.mirrorBg, display: "flex", alignItems: "flex-end", justifyContent: "space-around", padding: "2px" }}>
-            {(user.products.slice(r*2, r*2+2)).map((p,i) => (
-              <div key={i} style={{ width: 8, height: 12, background: p?.color || "transparent", borderRadius: 2, fontSize: 5 }} />
-            ))}
+            {(user.products.slice(r*2, r*2+2)).map((p,i) => <div key={i} style={{ width: 8, height: 12, background: p?.color || "transparent", borderRadius: 2 }} />)}
           </div>
         ))}
       </div>
-
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A" }}>{user.name}</div>
         <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{user.handle}</div>
         <div style={{ fontSize: 11, color: "#BBB", marginTop: 2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{user.products.length} products</div>
       </div>
-
-      <button
-        onClick={e => { e.stopPropagation(); setFollowing(f => !f); }}
-        style={{
-          background: following ? "#F0EDE8" : "#1A1A1A",
-          border: "none", borderRadius: 20,
-          padding: "6px 14px", fontSize: 12, fontWeight: 500,
-          color: following ? "#666" : "#FFF",
-          flexShrink: 0, transition: "all 0.2s",
-        }}
-      >{following ? "✓" : "+ Follow"}</button>
+      <button onClick={e => { e.stopPropagation(); setFollowing(f => !f); }} style={{ background: following ? "#F0EDE8" : "#1A1A1A", border: "none", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: following ? "#666" : "#FFF", flexShrink: 0, transition: "all 0.2s" }}>{following ? "✓" : "+ Follow"}</button>
     </div>
   );
 }
@@ -1369,18 +800,10 @@ function ExploreTab() {
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100, padding: "20px 16px 100px" }}>
       <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 6 }}>Explore</div>
       <div style={{ fontSize: 13, color: "#AAA", marginBottom: 20 }}>Discover what's trending in cabinets</div>
-
       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>TRENDING PRODUCTS</div>
       {MOCK_PRODUCTS.slice(0, 6).map((product, i) => (
-        <div key={product.id} className="fade-up" style={{
-          display: "flex", alignItems: "center", gap: 14,
-          background: "#FFF", borderRadius: 16, padding: "14px",
-          marginBottom: 10, border: "1.5px solid #EDE9E3",
-          animationDelay: `${i * 0.06}s`, opacity: 0,
-        }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, color: "#DDD", width: 28, textAlign: "center", flexShrink: 0 }}>
-            {String(i + 1).padStart(2, "0")}
-          </div>
+        <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 16, padding: "14px", marginBottom: 10, border: "1.5px solid #EDE9E3", animationDelay: `${i * 0.06}s`, opacity: 0 }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, color: "#DDD", width: 28, textAlign: "center", flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</div>
           <div style={{ width: 48, height: 66, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{product.emoji}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
@@ -1394,101 +817,40 @@ function ExploreTab() {
 }
 
 // ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
-// Layout: Feed | Search | [+] | Explore | Cabinet
-// The center "+" is a global shortcut to AddProductModal, not a tab itself.
 
 function BottomNav({ active, onChange, onAddPress }) {
-  const LEFT_TABS  = [
-    { id: "feed",   icon: "⚡", label: "Feed" },
-    { id: "search", icon: "🔍", label: "Search" },
-  ];
-  const RIGHT_TABS = [
-    { id: "explore", icon: "✦",  label: "Explore" },
-    { id: "cabinet", icon: "🪞", label: "Cabinet" },
-  ];
+  const LEFT_TABS  = [{ id: "feed", icon: "⚡", label: "Feed" }, { id: "search", icon: "🔍", label: "Search" }];
+  const RIGHT_TABS = [{ id: "explore", icon: "✦", label: "Explore" }, { id: "cabinet", icon: "🪞", label: "Cabinet" }];
 
   const NavTab = ({ tab }) => (
-    <button
-      className={`tab-btn ${active === tab.id ? "active" : ""}`}
-      onClick={() => onChange(tab.id)}
-      style={{
-        flex: 1, background: "none", border: "none",
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-        padding: "4px 0", position: "relative",
-      }}
-    >
-      {active === tab.id && (
-        <div style={{ position: "absolute", top: -10, width: 24, height: 2, background: "#1A1A1A", borderRadius: "0 0 2px 2px" }} />
-      )}
+    <button className={`tab-btn ${active === tab.id ? "active" : ""}`} onClick={() => onChange(tab.id)} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "4px 0", position: "relative" }}>
+      {active === tab.id && <div style={{ position: "absolute", top: -10, width: 24, height: 2, background: "#1A1A1A", borderRadius: "0 0 2px 2px" }} />}
       <span style={{ fontSize: 19 }}>{tab.icon}</span>
-      <span style={{
-        fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: "0.05em",
-        color: active === tab.id ? "#1A1A1A" : "#CCC",
-        transition: "color 0.2s",
-      }}>{tab.label}</span>
+      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: "0.05em", color: active === tab.id ? "#1A1A1A" : "#CCC", transition: "color 0.2s" }}>{tab.label}</span>
     </button>
   );
 
   return (
-    <div style={{
-      position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
-      width: "100%", maxWidth: 480,
-      background: "rgba(253,250,247,0.96)", backdropFilter: "blur(16px)",
-      borderTop: "1px solid #EDE9E3",
-      display: "flex", alignItems: "center", padding: "10px 0 24px", zIndex: 50,
-    }}>
+    <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "rgba(253,250,247,0.96)", backdropFilter: "blur(16px)", borderTop: "1px solid #EDE9E3", display: "flex", alignItems: "center", padding: "10px 0 24px", zIndex: 50 }}>
       {LEFT_TABS.map(tab => <NavTab key={tab.id} tab={tab} />)}
-
-      {/* Center + button */}
       <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
-        <button
-          onClick={onAddPress}
-          style={{
-            width: 52, height: 52,
-            background: "#1A1A1A",
-            border: "none",
-            borderRadius: "50%",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 20px rgba(26,26,26,0.22)",
-            cursor: "pointer",
-            marginBottom: 2,
-            transition: "transform 0.15s ease, box-shadow 0.15s ease",
-          }}
-          onMouseDown={e => e.currentTarget.style.transform = "scale(0.92)"}
-          onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
-          onTouchStart={e => e.currentTarget.style.transform = "scale(0.92)"}
-          onTouchEnd={e => e.currentTarget.style.transform = "scale(1)"}
-        >
+        <button onClick={onAddPress} style={{ width: 52, height: 52, background: "#1A1A1A", border: "none", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(26,26,26,0.22)", cursor: "pointer", marginBottom: 2, transition: "transform 0.15s ease, box-shadow 0.15s ease" }} onMouseDown={e => e.currentTarget.style.transform = "scale(0.92)"} onMouseUp={e => e.currentTarget.style.transform = "scale(1)"} onTouchStart={e => e.currentTarget.style.transform = "scale(0.92)"} onTouchEnd={e => e.currentTarget.style.transform = "scale(1)"}>
           <span style={{ fontSize: 26, color: "#FFF", lineHeight: 1, marginTop: -1 }}>+</span>
         </button>
       </div>
-
       {RIGHT_TABS.map(tab => <NavTab key={tab.id} tab={tab} />)}
     </div>
   );
 }
 
-
-// ─── AUTH SCREENS ────────────────────────────────────────────────────────────
-// Flow: splash → signup (3 steps) | signin → forgot  →  verify → onboarding → app
+// ─── AUTH COMPONENTS ─────────────────────────────────────────────────────────
 
 function AuthInput({ label, type = "text", value, onChange, placeholder, error, autoFocus }) {
   const [focused, setFocused] = useState(false);
   return (
     <div style={{ marginBottom: error ? 6 : 18 }}>
       {label && <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "#AAA", letterSpacing: "0.08em", marginBottom: 7 }}>{label}</div>}
-      <input
-        type={type} value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder} autoFocus={autoFocus}
-        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-        style={{
-          width: "100%", padding: "14px 16px",
-          background: "#FFF",
-          border: `1.5px solid ${error ? "#E07070" : focused ? "#C8B8A2" : "#E5E0D8"}`,
-          borderRadius: 12, fontSize: 15, color: "#1A1A1A",
-          fontFamily: "'Jost', sans-serif", outline: "none", transition: "border-color 0.2s",
-        }}
-      />
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} style={{ width: "100%", padding: "14px 16px", background: "#FFF", border: `1.5px solid ${error ? "#E07070" : focused ? "#C8B8A2" : "#E5E0D8"}`, borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", outline: "none", transition: "border-color 0.2s" }} />
       {error && <div style={{ fontSize: 12, color: "#E07070", marginTop: 5, fontFamily: "'DM Mono', monospace" }}>{error}</div>}
     </div>
   );
@@ -1496,19 +858,8 @@ function AuthInput({ label, type = "text", value, onChange, placeholder, error, 
 
 function AuthBtn({ label, onClick, loading, secondary, disabled }) {
   return (
-    <button onClick={onClick} disabled={disabled || loading} style={{
-      width: "100%", padding: "15px",
-      background: secondary ? "transparent" : (disabled || loading) ? "#C8BFB5" : "#1A1A1A",
-      border: secondary ? "1.5px solid #E5E0D8" : "none",
-      borderRadius: 14, fontSize: 15, fontWeight: 600,
-      color: secondary ? "#888" : "#FFF",
-      cursor: (disabled || loading) ? "default" : "pointer",
-      fontFamily: "'Jost', sans-serif", transition: "all 0.2s",
-      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-    }}>
-      {loading
-        ? <span style={{ display: "inline-block", width: 18, height: 18, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#FFF", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-        : label}
+    <button onClick={onClick} disabled={disabled || loading} style={{ width: "100%", padding: "15px", background: secondary ? "transparent" : (disabled || loading) ? "#C8BFB5" : "#1A1A1A", border: secondary ? "1.5px solid #E5E0D8" : "none", borderRadius: 14, fontSize: 15, fontWeight: 600, color: secondary ? "#888" : "#FFF", cursor: (disabled || loading) ? "default" : "pointer", fontFamily: "'Jost', sans-serif", transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+      {loading ? <span style={{ display: "inline-block", width: 18, height: 18, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#FFF", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> : label}
     </button>
   );
 }
@@ -1517,17 +868,9 @@ function AuthBtn({ label, onClick, loading, secondary, disabled }) {
 function SplashScreen({ onSignIn, onSignUp }) {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0F0D0B", padding: "0 28px", animation: "fadeUp 0.5s ease forwards" }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-
-      {/* Decorative cabinet */}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 40 }}>
         <div style={{ position: "relative", width: 220, height: 280 }}>
-          <div style={{
-            position: "absolute", inset: 0,
-            background: "linear-gradient(160deg, #2C1810 0%, #3D2314 50%, #2A1508 100%)",
-            border: "5px solid #1A0D06", borderRadius: 20,
-            boxShadow: "0 30px 80px rgba(0,0,0,0.7)", overflow: "hidden",
-          }}>
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, #2C1810 0%, #3D2314 50%, #2A1508 100%)", border: "5px solid #1A0D06", borderRadius: 20, boxShadow: "0 30px 80px rgba(0,0,0,0.7)", overflow: "hidden" }}>
             <div style={{ height: 10, background: "#5C3D1E", borderBottom: "2px solid #1A0D06" }} />
             {[0,1,2].map(row => (
               <div key={row}>
@@ -1544,12 +887,8 @@ function SplashScreen({ onSignIn, onSignUp }) {
           <div style={{ position: "absolute", inset: -20, background: "radial-gradient(ellipse at 50% 50%, rgba(200,184,162,0.15) 0%, transparent 70%)", pointerEvents: "none" }} />
         </div>
       </div>
-
-      {/* CTA */}
       <div style={{ paddingBottom: 56, textAlign: "center" }}>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 52, fontWeight: 600, color: "#FDFAF7", letterSpacing: "-0.02em", lineHeight: 1, marginBottom: 6 }}>
-          cabinet<span style={{ color: "#C8B8A2", fontStyle: "italic" }}>.</span>
-        </div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 52, fontWeight: 600, color: "#FDFAF7", letterSpacing: "-0.02em", lineHeight: 1, marginBottom: 6 }}>cabinet<span style={{ color: "#C8B8A2", fontStyle: "italic" }}>.</span></div>
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#665C52", letterSpacing: "0.12em", marginBottom: 40 }}>YOUR BEAUTY. YOUR SHELF.</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <AuthBtn label="Create account" onClick={onSignUp} />
@@ -1563,7 +902,7 @@ function SplashScreen({ onSignIn, onSignUp }) {
   );
 }
 
-// ── Sign Up (3-step) ─────────────────────────────────────────────────────────
+// ── Sign Up (3-step) — REAL SUPABASE AUTH ────────────────────────────────────
 function SignUpScreen({ onBack, onSuccess }) {
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
@@ -1573,7 +912,7 @@ function SignUpScreen({ onBack, onSuccess }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const next = () => {
+  const next = async () => {
     if (step === 1) {
       if (!email.includes("@") || !email.includes(".")) { setErrors({ email: "Enter a valid email address" }); return; }
       setErrors({}); setStep(2);
@@ -1586,8 +925,31 @@ function SignUpScreen({ onBack, onSuccess }) {
       if (!handle.trim()) e.handle = "Handle is required";
       else if (!/^[a-z0-9_]+$/.test(handle)) e.handle = "Lowercase, numbers, underscores only";
       if (Object.keys(e).length) { setErrors(e); return; }
+
       setLoading(true);
-      setTimeout(() => { setLoading(false); onSuccess({ email, name, handle: "@" + handle }); }, 1200);
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: name, display_name: name } },
+        });
+
+        if (error) {
+          setErrors({ name: error.message.includes("already registered") ? "This email is already registered. Try signing in." : error.message });
+          setLoading(false);
+          return;
+        }
+
+        if (data.user) {
+          await supabase.from("profiles").update({ display_name: name, username: handle }).eq("id", data.user.id);
+        }
+
+        setLoading(false);
+        onSuccess({ email, name, handle: "@" + handle, id: data.user?.id });
+      } catch (err) {
+        setErrors({ name: "Something went wrong. Please try again." });
+        setLoading(false);
+      }
     }
   };
 
@@ -1600,12 +962,9 @@ function SignUpScreen({ onBack, onSuccess }) {
           <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "#AAA" }}>Step {step} of 3 — {["Email","Password","Profile"][step-1]}</div>
         </div>
       </div>
-
-      {/* Progress bar */}
       <div style={{ margin: "16px 24px 0", height: 3, background: "#E5E0D8", borderRadius: 2 }}>
         <div style={{ height: "100%", width: `${(step/3)*100}%`, background: "#1A1A1A", borderRadius: 2, transition: "width 0.4s ease" }} />
       </div>
-
       <div style={{ flex: 1, padding: "32px 24px 0", display: "flex", flexDirection: "column" }}>
         {step === 1 && (
           <>
@@ -1622,13 +981,9 @@ function SignUpScreen({ onBack, onSuccess }) {
             {password.length > 0 && (
               <div style={{ marginTop: -10, marginBottom: 16 }}>
                 <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
-                  {[1,2,3,4].map(i => (
-                    <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: password.length >= i*3 ? (password.length >= 12 ? "#7EC8A0" : password.length >= 8 ? "#C8B87E" : "#E07070") : "#E5E0D8", transition: "background 0.3s" }} />
-                  ))}
+                  {[1,2,3,4].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: password.length >= i*3 ? (password.length >= 12 ? "#7EC8A0" : password.length >= 8 ? "#C8B87E" : "#E07070") : "#E5E0D8", transition: "background 0.3s" }} />)}
                 </div>
-                <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: password.length >= 12 ? "#7EC8A0" : password.length >= 8 ? "#C8B87E" : "#E07070" }}>
-                  {password.length >= 12 ? "Strong" : password.length >= 8 ? "Good" : "Too short"}
-                </div>
+                <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: password.length >= 12 ? "#7EC8A0" : password.length >= 8 ? "#C8B87E" : "#E07070" }}>{password.length >= 12 ? "Strong" : password.length >= 8 ? "Good" : "Too short"}</div>
               </div>
             )}
           </>
@@ -1642,14 +997,12 @@ function SignUpScreen({ onBack, onSuccess }) {
               <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "#AAA", letterSpacing: "0.08em", marginBottom: 7 }}>HANDLE</div>
               <div style={{ position: "relative" }}>
                 <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#C8B8A2", fontSize: 15, fontWeight: 600 }}>@</span>
-                <input value={handle} onChange={e => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,""))} placeholder="yourhandle"
-                  style={{ width: "100%", padding: "14px 16px 14px 30px", background: "#FFF", border: `1.5px solid ${errors.handle ? "#E07070" : "#E5E0D8"}`, borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", outline: "none" }} />
+                <input value={handle} onChange={e => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,""))} placeholder="yourhandle" style={{ width: "100%", padding: "14px 16px 14px 30px", background: "#FFF", border: `1.5px solid ${errors.handle ? "#E07070" : "#E5E0D8"}`, borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", outline: "none" }} />
               </div>
               {errors.handle && <div style={{ fontSize: 12, color: "#E07070", marginTop: 5, fontFamily: "'DM Mono', monospace" }}>{errors.handle}</div>}
             </div>
           </>
         )}
-
         <div style={{ marginTop: "auto", paddingBottom: 40 }}>
           <AuthBtn label={step < 3 ? "Continue →" : "Create my cabinet"} onClick={next} loading={loading} />
           {step > 1 && <button onClick={() => { setStep(s => s-1); setErrors({}); }} style={{ width: "100%", padding: "12px", background: "none", border: "none", color: "#AAA", fontSize: 14, marginTop: 8, cursor: "pointer" }}>← Back</button>}
@@ -1659,20 +1012,40 @@ function SignUpScreen({ onBack, onSuccess }) {
   );
 }
 
-// ── Sign In ──────────────────────────────────────────────────────────────────
+// ── Sign In — REAL SUPABASE AUTH ─────────────────────────────────────────────
 function SignInScreen({ onBack, onSuccess, onForgot }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     const e = {};
     if (!email.includes("@")) e.email = "Enter a valid email address";
     if (!password) e.password = "Password is required";
     if (Object.keys(e).length) { setErrors(e); return; }
+
     setLoading(true);
-    setTimeout(() => { setLoading(false); onSuccess({ email, name: "Jane Doe", handle: "@myhandle" }); }, 1200);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          setErrors({ password: "Incorrect email or password" });
+        } else if (error.message.includes("Email not confirmed")) {
+          setErrors({ email: "Please verify your email first — check your inbox" });
+        } else {
+          setErrors({ password: error.message });
+        }
+        setLoading(false);
+        return;
+      }
+      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url").eq("id", data.user.id).single();
+      setLoading(false);
+      onSuccess({ id: data.user.id, email: data.user.email, name: profile?.display_name || data.user.email, handle: profile?.username ? "@" + profile.username : "@user" });
+    } catch (err) {
+      setErrors({ password: "Something went wrong. Please try again." });
+      setLoading(false);
+    }
   };
 
   return (
@@ -1708,10 +1081,14 @@ function ForgotPasswordScreen({ onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const submit = () => {
+  const submit = async () => {
     if (!email.includes("@")) { setError("Enter a valid email address"); return; }
     setError(""); setLoading(true);
-    setTimeout(() => { setLoading(false); setSent(true); }, 1000);
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    setSent(true);
   };
 
   return (
@@ -1765,10 +1142,24 @@ function VerifyEmailScreen({ user, onVerified }) {
 
   const handleKey = (e, i) => { if (e.key === "Backspace" && !code[i] && i > 0) inputRefs.current[i-1]?.focus(); };
 
-  const submit = () => {
-    if (code.join("").length < 6) { setError("Enter the full 6-digit code"); return; }
+  const submit = async () => {
+    const token = code.join("");
+    if (token.length < 6) { setError("Enter the full 6-digit code"); return; }
     setError(""); setLoading(true);
-    setTimeout(() => { setLoading(false); onVerified(); }, 1000);
+    const { error: verifyError } = await supabase.auth.verifyOtp({ email: user?.email, token, type: "signup" });
+    if (verifyError) {
+      setError("Invalid or expired code. Try resending.");
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+    onVerified();
+  };
+
+  const resend = async () => {
+    await supabase.auth.resend({ type: "signup", email: user?.email });
+    setResent(true);
+    setTimeout(() => setResent(false), 4000);
   };
 
   return (
@@ -1776,20 +1167,14 @@ function VerifyEmailScreen({ user, onVerified }) {
       <div style={{ flex: 1, padding: "56px 24px 0", display: "flex", flexDirection: "column" }}>
         <div style={{ fontSize: 48, marginBottom: 20, textAlign: "center" }}>✉️</div>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 30, fontWeight: 600, color: "#1A1A1A", textAlign: "center", marginBottom: 10 }}>Verify your email</div>
-        <div style={{ fontSize: 14, color: "#AAA", textAlign: "center", lineHeight: 1.7, marginBottom: 40 }}>
-          We sent a 6-digit code to<br /><strong style={{ color: "#1A1A1A" }}>{user?.email}</strong>
-        </div>
-        {/* 6-box code input */}
+        <div style={{ fontSize: 14, color: "#AAA", textAlign: "center", lineHeight: 1.7, marginBottom: 40 }}>We sent a 6-digit code to<br /><strong style={{ color: "#1A1A1A" }}>{user?.email}</strong></div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 16 }}>
           {code.map((digit, i) => (
-            <input key={i} ref={el => inputRefs.current[i] = el}
-              value={digit} onChange={e => handleDigit(e.target.value, i)} onKeyDown={e => handleKey(e, i)} maxLength={6}
-              style={{ width: 46, height: 56, textAlign: "center", fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: "#FFF", border: `2px solid ${digit ? "#1A1A1A" : "#E5E0D8"}`, borderRadius: 12, color: "#1A1A1A", outline: "none", transition: "border-color 0.2s" }}
-            />
+            <input key={i} ref={el => inputRefs.current[i] = el} value={digit} onChange={e => handleDigit(e.target.value, i)} onKeyDown={e => handleKey(e, i)} maxLength={6} style={{ width: 46, height: 56, textAlign: "center", fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: "#FFF", border: `2px solid ${digit ? "#1A1A1A" : "#E5E0D8"}`, borderRadius: 12, color: "#1A1A1A", outline: "none", transition: "border-color 0.2s" }} />
           ))}
         </div>
         {error && <div style={{ textAlign: "center", fontSize: 12, color: "#E07070", fontFamily: "'DM Mono', monospace", marginBottom: 12 }}>{error}</div>}
-        <button onClick={() => { setResent(true); setTimeout(() => setResent(false), 4000); }} style={{ background: "none", border: "none", color: resent ? "#7EC8A0" : "#C8B8A2", fontSize: 13, textAlign: "center", cursor: "pointer", marginBottom: 36 }}>
+        <button onClick={resend} style={{ background: "none", border: "none", color: resent ? "#7EC8A0" : "#C8B8A2", fontSize: 13, textAlign: "center", cursor: "pointer", marginBottom: 36 }}>
           {resent ? "✓ Code resent!" : "Didn't get it? Resend code"}
         </button>
         <div style={{ marginTop: "auto", paddingBottom: 48 }}>
@@ -1800,43 +1185,37 @@ function VerifyEmailScreen({ user, onVerified }) {
   );
 }
 
-// ── Onboarding – pick cabinet theme ─────────────────────────────────────────
+// ── Onboarding ───────────────────────────────────────────────────────────────
 function OnboardingScreen({ user, onComplete }) {
   const [selectedTheme, setSelectedTheme] = useState(CABINET_THEMES[0].id);
   const [loading, setLoading] = useState(false);
 
-  const finish = () => {
+  const finish = async () => {
     setLoading(true);
-    setTimeout(() => { setLoading(false); onComplete(CABINET_THEMES.find(t => t.id === selectedTheme)); }, 800);
+    const theme = CABINET_THEMES.find(t => t.id === selectedTheme);
+    if (user?.id) {
+      await supabase.from("profiles").update({ onboarding_complete: true }).eq("id", user.id);
+    }
+    setLoading(false);
+    onComplete(theme);
   };
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#F7F5F2", animation: "fadeUp 0.4s ease", overflowY: "auto" }}>
       <div style={{ padding: "48px 24px 0", flex: 1 }}>
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#C8B8A2", letterSpacing: "0.15em", marginBottom: 10 }}>ALMOST THERE</div>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.15, marginBottom: 8 }}>
-          Choose your style{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
-        </div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.15, marginBottom: 8 }}>Choose your style{user?.name ? `, ${user.name.split(" ")[0]}` : ""}</div>
         <div style={{ fontSize: 14, color: "#AAA", lineHeight: 1.6, marginBottom: 36 }}>You can always change this later from your cabinet.</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 36 }}>
           {CABINET_THEMES.map(theme => (
-            <button key={theme.id} onClick={() => setSelectedTheme(theme.id)} style={{
-              background: theme.cabinetBg, border: selectedTheme === theme.id ? "3px solid #1A1A1A" : "2px solid transparent",
-              borderRadius: 18, padding: "16px 14px 14px", cursor: "pointer", position: "relative", overflow: "hidden",
-              transition: "transform 0.2s, border 0.2s", transform: selectedTheme === theme.id ? "scale(1.02)" : "scale(1)",
-              display: "flex", flexDirection: "column", gap: 10,
-            }}>
-              {selectedTheme === theme.id && (
-                <div style={{ position: "absolute", top: 10, right: 10, width: 22, height: 22, background: "#FFF", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#1A1A1A", fontWeight: 700 }}>✓</div>
-              )}
+            <button key={theme.id} onClick={() => setSelectedTheme(theme.id)} style={{ background: theme.cabinetBg, border: selectedTheme === theme.id ? "3px solid #1A1A1A" : "2px solid transparent", borderRadius: 18, padding: "16px 14px 14px", cursor: "pointer", position: "relative", overflow: "hidden", transition: "transform 0.2s, border 0.2s", transform: selectedTheme === theme.id ? "scale(1.02)" : "scale(1)", display: "flex", flexDirection: "column", gap: 10 }}>
+              {selectedTheme === theme.id && <div style={{ position: "absolute", top: 10, right: 10, width: 22, height: 22, background: "#FFF", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#1A1A1A", fontWeight: 700 }}>✓</div>}
               <div style={{ borderRadius: 10, overflow: "hidden", border: `3px solid ${theme.cabinetBorder}` }}>
                 <div style={{ height: 6, background: theme.edgeBg }} />
                 {[0,1].map(row => (
                   <div key={row}>
                     <div style={{ height: 40, background: theme.mirrorBg, display: "flex", alignItems: "flex-end", justifyContent: "space-around", padding: "6px 10px 0" }}>
-                      {["💊","💄","🧴"].map((e,i) => (
-                        <div key={i} style={{ width: 18, height: 26, background: ["#FFB3C8","#D4A0A0","#B8D4E8"][i], borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>{e}</div>
-                      ))}
+                      {["💊","💄","🧴"].map((e,i) => <div key={i} style={{ width: 18, height: 26, background: ["#FFB3C8","#D4A0A0","#B8D4E8"][i], borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>{e}</div>)}
                     </div>
                     <div style={{ height: 8, background: theme.shelfBg }} />
                   </div>
@@ -1855,17 +1234,46 @@ function OnboardingScreen({ user, onComplete }) {
   );
 }
 
-// ─── AUTH GATE ───────────────────────────────────────────────────────────────
-// Controls entire auth flow. screens: splash | signin | signup | forgot | verify | onboarding
+// ── Auth Gate — WITH SESSION PERSISTENCE ─────────────────────────────────────
 function AuthGate({ onAuthenticated }) {
   const [screen, setScreen] = useState("splash");
   const [pendingUser, setPendingUser] = useState(null);
+  const [checking, setChecking] = useState(true);
 
-  if (screen === "splash")    return <SplashScreen onSignIn={() => setScreen("signin")} onSignUp={() => setScreen("signup")} />;
-  if (screen === "signin")    return <SignInScreen onBack={() => setScreen("splash")} onForgot={() => setScreen("forgot")} onSuccess={user => { setPendingUser(user); onAuthenticated(user); }} />;
-  if (screen === "signup")    return <SignUpScreen onBack={() => setScreen("splash")} onSuccess={user => { setPendingUser(user); setScreen("verify"); }} />;
-  if (screen === "forgot")    return <ForgotPasswordScreen onBack={() => setScreen("signin")} />;
-  if (screen === "verify")    return <VerifyEmailScreen user={pendingUser} onVerified={() => setScreen("onboarding")} />;
+  useEffect(() => {
+    // Check for existing session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        supabase.from("profiles").select("display_name, username, avatar_url").eq("id", session.user.id).single()
+          .then(({ data: profile }) => {
+            onAuthenticated({
+              id: session.user.id,
+              email: session.user.email,
+              name: profile?.display_name || session.user.email,
+              handle: profile?.username ? "@" + profile.username : "@user",
+            });
+          });
+      } else {
+        setChecking(false);
+      }
+    });
+  }, []);
+
+  if (checking) {
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#0F0D0B" }}>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 42, fontWeight: 600, color: "#FDFAF7", letterSpacing: "-0.02em" }}>
+          cabinet<span style={{ color: "#C8B8A2", fontStyle: "italic" }}>.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (screen === "splash")     return <SplashScreen onSignIn={() => setScreen("signin")} onSignUp={() => setScreen("signup")} />;
+  if (screen === "signin")     return <SignInScreen onBack={() => setScreen("splash")} onForgot={() => setScreen("forgot")} onSuccess={user => onAuthenticated(user)} />;
+  if (screen === "signup")     return <SignUpScreen onBack={() => setScreen("splash")} onSuccess={user => { setPendingUser(user); setScreen("verify"); }} />;
+  if (screen === "forgot")     return <ForgotPasswordScreen onBack={() => setScreen("signin")} />;
+  if (screen === "verify")     return <VerifyEmailScreen user={pendingUser} onVerified={() => setScreen("onboarding")} />;
   if (screen === "onboarding") return <OnboardingScreen user={pendingUser} onComplete={theme => onAuthenticated({ ...pendingUser, cabinetTheme: theme })} />;
   return null;
 }
@@ -1873,10 +1281,10 @@ function AuthGate({ onAuthenticated }) {
 // ─── ROOT APP ────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [authedUser, setAuthedUser]     = useState(null);
-  const [activeTab, setActiveTab]       = useState("feed");
+  const [authedUser, setAuthedUser] = useState(null);
+  const [activeTab, setActiveTab] = useState("feed");
   const [cabinetTheme, setCabinetTheme] = useState(CABINET_THEMES[0]);
-  const [myProducts, setMyProducts]     = useState(MOCK_PRODUCTS.slice(0, 7));
+  const [myProducts, setMyProducts] = useState(MOCK_PRODUCTS.slice(0, 7));
   const [showAddModal, setShowAddModal] = useState(false);
 
   const handleAuthenticated = (user) => {
@@ -1901,9 +1309,7 @@ export default function App() {
     {activeTab === "feed"    && <FeedTab />}
     {activeTab === "search"  && <SearchTab />}
     {activeTab === "explore" && <ExploreTab />}
-    {activeTab === "cabinet" && (
-      <ProfileTab products={myProducts} theme={cabinetTheme} onThemeChange={setCabinetTheme} onAddProduct={handleAddProduct} />
-    )}
+    {activeTab === "cabinet" && <ProfileTab products={myProducts} theme={cabinetTheme} onThemeChange={setCabinetTheme} onAddProduct={handleAddProduct} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
