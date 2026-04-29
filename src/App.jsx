@@ -91,7 +91,7 @@ const CABINET_THEMES = [
     cabinetBorder: "#1A0D06",
     mirrorBg: "linear-gradient(135deg, #F5ECD7 0%, #EDE0C4 40%, #F0E8D0 100%)",
     edgeBg: "#5C3D1E",
-    label: "🪵",
+    emoji: "🪵",
   },
   {
     id: "glass",
@@ -102,7 +102,7 @@ const CABINET_THEMES = [
     cabinetBorder: "#8AA0B5",
     mirrorBg: "linear-gradient(135deg, #E8F0F8 0%, #F5F8FC 40%, #EAF2FA 100%)",
     edgeBg: "#9EB5C8",
-    label: "🪟",
+    emoji: "🪟",
   },
   {
     id: "maximalist",
@@ -113,7 +113,7 @@ const CABINET_THEMES = [
     cabinetBorder: "#7A2050",
     mirrorBg: "linear-gradient(135deg, #FFE8F5 0%, #FFD0ED 40%, #FFE5F7 100%)",
     edgeBg: "#8B2060",
-    label: "🌸",
+    emoji: "🌸",
   },
   {
     id: "mirror",
@@ -124,7 +124,7 @@ const CABINET_THEMES = [
     cabinetBorder: "#607080",
     mirrorBg: "linear-gradient(135deg, #E0E8F0 0%, #EEF4FA 30%, #DDE8F2 60%, #E8F0F8 100%)",
     edgeBg: "#7090A8",
-    label: "🪞",
+    emoji: "🪞",
   },
 ];
 
@@ -554,7 +554,7 @@ function ProfileTab({ products, theme, onThemeChange, onAddProduct }) {
             <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{products.length} products · @myhandle</div>
           </div>
           <button onClick={() => setShowThemePicker(true)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 500, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
-            {theme.label} Style
+            {theme.emoji} Style
           </button>
         </div>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
