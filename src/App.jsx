@@ -328,28 +328,102 @@ function ProductModal({ product, onClose }) {
 
 // ─── ADD PRODUCT MODAL ───────────────────────────────────────────────────────
 
+// ─── CATEGORY HELPERS ────────────────────────────────────────────────────────
+const categoryEmoji = (cat) => ({ skincare: "🧴", makeup: "💄", haircare: "💇🏽", bodycare: "🌺", fragrance: "🌸", wellness: "💛" }[cat] || "✨");
+const categoryColor = (cat) => ({ skincare: "#B8D4E8", makeup: "#D4A0A0", haircare: "#C8B8E8", bodycare: "#FFD4A0", fragrance: "#E8D4F0", wellness: "#FFF0A0" }[cat] || "#E8E8E8");
+
 function AddProductModal({ onClose, onAdd }) {
   const [mode, setMode] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState([]);
+  const [browseProducts, setBrowseProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [searching, setSearching] = useState(false);
 
+  // Real Supabase product search with debounce
   useEffect(() => {
-    if (searchQuery.length > 1) {
-      const q = searchQuery.toLowerCase();
-      setResults(SEARCH_DB.filter(p => p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)).slice(0, 6));
-    } else {
-      setResults([]);
-    }
+    if (searchQuery.length < 2) { setResults([]); return; }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+
+      // Find matching brand IDs first
+      const { data: brandMatches } = await supabase
+        .from("brands")
+        .select("id")
+        .ilike("name", `%${searchQuery}%`);
+
+      const brandIds = (brandMatches || []).map(b => b.id);
+
+      let queryBuilder = supabase
+        .from("product_lines")
+        .select(`id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )`)
+        .limit(12);
+
+      if (brandIds.length > 0) {
+        queryBuilder = queryBuilder.or(`name.ilike.%${searchQuery}%,brand_id.in.(${brandIds.join(",")})`);
+      } else {
+        queryBuilder = queryBuilder.ilike("name", `%${searchQuery}%`);
+      }
+
+      const { data: lineData } = await queryBuilder;
+
+      const seen = new Set();
+      const normalized = [];
+      for (const pl of (lineData || [])) {
+        if (seen.has(pl.id)) continue;
+        seen.add(pl.id);
+        if (pl.products?.length > 0) {
+          const sku = pl.products[0];
+          normalized.push({
+            id: sku.id,
+            name: pl.name,
+            sku: sku.name,
+            brand: pl.brands?.name || "",
+            category: pl.category,
+            price: sku.price_usd ? `$${sku.price_usd}` : "",
+            emoji: categoryEmoji(pl.category),
+            color: categoryColor(pl.category),
+          });
+        }
+        if (normalized.length >= 6) break;
+      }
+
+      setResults(normalized);
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Real Supabase category browse
+  useEffect(() => {
+    if (!selectedCategory) { setBrowseProducts([]); return; }
+    supabase
+      .from("product_lines")
+      .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
+      .eq("category", selectedCategory)
+      .limit(20)
+      .then(({ data }) => {
+        const normalized = (data || [])
+          .filter(pl => pl.products?.length > 0)
+          .map(pl => ({
+            id: pl.products[0].id,
+            name: pl.name,
+            sku: pl.products[0].name,
+            brand: pl.brands?.name || "",
+            category: pl.category,
+            price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
+            emoji: categoryEmoji(pl.category),
+            color: categoryColor(pl.category),
+          }));
+        setBrowseProducts(normalized);
+      });
+  }, [selectedCategory]);
 
   const handleAdd = (product) => {
     setAdding(true);
     setTimeout(() => { onAdd(product); onClose(); }, 600);
   };
-
-  const browseProducts = selectedCategory ? SEARCH_DB.filter(p => p.category === selectedCategory) : [];
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -679,10 +753,66 @@ function SearchTab() {
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
+  const [productResults, setProductResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const inputRef = useRef(null);
   const q = query.toLowerCase().trim();
+
+  // Real Supabase product search with debounce
+  useEffect(() => {
+    if (q.length < 2) { setProductResults([]); return; }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+
+      // First find matching brand IDs
+      const { data: brandMatches } = await supabase
+        .from("brands")
+        .select("id")
+        .ilike("name", `%${q}%`);
+
+      const brandIds = (brandMatches || []).map(b => b.id);
+
+      // Build filter: match product line name OR brand_id in matching brands
+      let queryBuilder = supabase
+        .from("product_lines")
+        .select(`id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )`)
+        .limit(12);
+
+      if (brandIds.length > 0) {
+        queryBuilder = queryBuilder.or(`name.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`);
+      } else {
+        queryBuilder = queryBuilder.ilike("name", `%${q}%`);
+      }
+
+      const { data: lineData } = await queryBuilder;
+
+      const seen = new Set();
+      const results = [];
+      for (const pl of (lineData || [])) {
+        if (seen.has(pl.id)) continue;
+        seen.add(pl.id);
+        if (pl.products?.length > 0) {
+          const sku = pl.products[0];
+          results.push({
+            id: sku.id,
+            name: pl.name,
+            brand: pl.brands?.name || "",
+            category: pl.category,
+            price: sku.price_usd ? `$${sku.price_usd}` : "",
+            emoji: categoryEmoji(pl.category),
+            color: categoryColor(pl.category),
+          });
+        }
+        if (results.length >= 6) break;
+      }
+
+      setProductResults(results);
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [q]);
+
   const userResults = q.length > 0 ? MOCK_USERS.filter(u => u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q) || u.bio.toLowerCase().includes(q)) : [];
-  const productResults = q.length > 0 ? SEARCH_DB.filter(p => p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q)).slice(0, 6) : [];
   const topicResults = q.length > 0 ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : [];
   const hasResults = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
   const showPeople = activeFilter === "all" || activeFilter === "people";
@@ -739,6 +869,7 @@ function SearchTab() {
         {showProducts && productResults.length > 0 && (
           <div style={{ paddingTop: 20 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PRODUCTS</div>
+            {searching && <div style={{ textAlign: "center", padding: "20px 0", color: "#CCC", fontSize: 13 }}>searching...</div>}
             {productResults.map((product, i) => (
               <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
                 <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{product.emoji}</div>
@@ -746,7 +877,7 @@ function SearchTab() {
                   <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
                   <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{product.brand} · {product.price}</div>
                 </div>
-                <span style={{ background: retailerBg(product.retailer), color: retailerColor(product.retailer), fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>{product.retailer}</span>
+                <span style={{ background: "#F5F0EB", color: "#888", fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0, textTransform: "capitalize" }}>{product.category}</span>
               </div>
             ))}
           </div>
