@@ -346,28 +346,31 @@ function AddProductModal({ onClose, onAdd }) {
     if (searchQuery.length < 2) { setResults([]); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
-      const q = searchQuery.toLowerCase();
 
-      const { data: lineData } = await supabase
+      // Find matching brand IDs first
+      const { data: brandMatches } = await supabase
+        .from("brands")
+        .select("id")
+        .ilike("name", `%${searchQuery}%`);
+
+      const brandIds = (brandMatches || []).map(b => b.id);
+
+      let queryBuilder = supabase
         .from("product_lines")
-        .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
-        .ilike("name", `%${searchQuery}%`)
-        .limit(10);
+        .select(`id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )`)
+        .limit(12);
 
-      const { data: allData } = await supabase
-        .from("product_lines")
-        .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
-        .limit(50);
+      if (brandIds.length > 0) {
+        queryBuilder = queryBuilder.or(`name.ilike.%${searchQuery}%,brand_id.in.(${brandIds.join(",")})`);
+      } else {
+        queryBuilder = queryBuilder.ilike("name", `%${searchQuery}%`);
+      }
 
-      const brandMatches = (allData || []).filter(pl =>
-        pl.brands?.name?.toLowerCase().includes(q)
-      );
+      const { data: lineData } = await queryBuilder;
 
-      const allLines = [...(lineData || []), ...brandMatches];
       const seen = new Set();
       const normalized = [];
-
-      for (const pl of allLines) {
+      for (const pl of (lineData || [])) {
         if (seen.has(pl.id)) continue;
         seen.add(pl.id);
         if (pl.products?.length > 0) {
@@ -761,42 +764,34 @@ function SearchTab() {
     const timer = setTimeout(async () => {
       setSearching(true);
 
-      // Search product lines by name or brand name
-      const { data: lineData } = await supabase
+      // First find matching brand IDs
+      const { data: brandMatches } = await supabase
+        .from("brands")
+        .select("id")
+        .ilike("name", `%${q}%`);
+
+      const brandIds = (brandMatches || []).map(b => b.id);
+
+      // Build filter: match product line name OR brand_id in matching brands
+      let queryBuilder = supabase
         .from("product_lines")
-        .select(`
-          id, name, category,
-          brands ( name ),
-          products ( id, name, price_usd )
-        `)
-        .or(`name.ilike.%${q}%`)
-        .limit(10);
+        .select(`id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )`)
+        .limit(12);
 
-      // Also search brands by name
-      const { data: brandData } = await supabase
-        .from("product_lines")
-        .select(`
-          id, name, category,
-          brands ( name ),
-          products ( id, name, price_usd )
-        `)
-        .limit(50);
+      if (brandIds.length > 0) {
+        queryBuilder = queryBuilder.or(`name.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`);
+      } else {
+        queryBuilder = queryBuilder.ilike("name", `%${q}%`);
+      }
 
-      const allLines = [
-        ...(lineData || []),
-        ...(brandData || []).filter(pl =>
-          pl.brands?.name?.toLowerCase().includes(q)
-        ),
-      ];
+      const { data: lineData } = await queryBuilder;
 
-      // Deduplicate by product line id, then flatten to product rows
       const seen = new Set();
       const results = [];
-      for (const pl of allLines) {
+      for (const pl of (lineData || [])) {
         if (seen.has(pl.id)) continue;
         seen.add(pl.id);
         if (pl.products?.length > 0) {
-          // Use first SKU as the representative product
           const sku = pl.products[0];
           results.push({
             id: sku.id,
