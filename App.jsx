@@ -346,37 +346,47 @@ function AddProductModal({ onClose, onAdd }) {
     if (searchQuery.length < 2) { setResults([]); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
-      const { data } = await supabase
-        .from("products")
-        .select(`id, name, price_usd, product_lines ( id, name, category, brands ( name ) )`)
+      const q = searchQuery.toLowerCase();
+
+      const { data: lineData } = await supabase
+        .from("product_lines")
+        .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
         .ilike("name", `%${searchQuery}%`)
         .limit(10);
 
-      // Also search by product line name
-      const { data: lineData } = await supabase
-        .from("products")
-        .select(`id, name, price_usd, product_lines ( id, name, category, brands ( name ) )`)
-        .ilike("product_lines.name", `%${searchQuery}%`)
-        .limit(10);
+      const { data: allData } = await supabase
+        .from("product_lines")
+        .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
+        .limit(50);
 
-      const combined = [...(data || []), ...(lineData || [])];
+      const brandMatches = (allData || []).filter(pl =>
+        pl.brands?.name?.toLowerCase().includes(q)
+      );
+
+      const allLines = [...(lineData || []), ...brandMatches];
       const seen = new Set();
-      const unique = combined.filter(p => {
-        if (seen.has(p.id) || !p.product_lines) return false;
-        seen.add(p.id);
-        return true;
-      });
+      const normalized = [];
 
-      setResults(unique.slice(0, 6).map(p => ({
-        id: p.id,
-        name: p.product_lines.name,
-        sku: p.name,
-        brand: p.product_lines.brands?.name || "",
-        category: p.product_lines.category,
-        price: p.price_usd ? `$${p.price_usd}` : "",
-        emoji: categoryEmoji(p.product_lines.category),
-        color: categoryColor(p.product_lines.category),
-      })));
+      for (const pl of allLines) {
+        if (seen.has(pl.id)) continue;
+        seen.add(pl.id);
+        if (pl.products?.length > 0) {
+          const sku = pl.products[0];
+          normalized.push({
+            id: sku.id,
+            name: pl.name,
+            sku: sku.name,
+            brand: pl.brands?.name || "",
+            category: pl.category,
+            price: sku.price_usd ? `$${sku.price_usd}` : "",
+            emoji: categoryEmoji(pl.category),
+            color: categoryColor(pl.category),
+          });
+        }
+        if (normalized.length >= 6) break;
+      }
+
+      setResults(normalized);
       setSearching(false);
     }, 300);
     return () => clearTimeout(timer);
@@ -386,23 +396,24 @@ function AddProductModal({ onClose, onAdd }) {
   useEffect(() => {
     if (!selectedCategory) { setBrowseProducts([]); return; }
     supabase
-      .from("products")
-      .select(`id, name, price_usd, product_lines ( id, name, category, brands ( name ) )`)
-      .limit(30)
+      .from("product_lines")
+      .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
+      .eq("category", selectedCategory)
+      .limit(20)
       .then(({ data }) => {
-        const filtered = (data || [])
-          .filter(p => p.product_lines?.category === selectedCategory)
-          .map(p => ({
-            id: p.id,
-            name: p.product_lines.name,
-            sku: p.name,
-            brand: p.product_lines.brands?.name || "",
-            category: p.product_lines.category,
-            price: p.price_usd ? `$${p.price_usd}` : "",
-            emoji: categoryEmoji(p.product_lines.category),
-            color: categoryColor(p.product_lines.category),
+        const normalized = (data || [])
+          .filter(pl => pl.products?.length > 0)
+          .map(pl => ({
+            id: pl.products[0].id,
+            name: pl.name,
+            sku: pl.products[0].name,
+            brand: pl.brands?.name || "",
+            category: pl.category,
+            price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
+            emoji: categoryEmoji(pl.category),
+            color: categoryColor(pl.category),
           }));
-        setBrowseProducts(filtered);
+        setBrowseProducts(normalized);
       });
   }, [selectedCategory]);
 
@@ -744,41 +755,63 @@ function SearchTab() {
   const inputRef = useRef(null);
   const q = query.toLowerCase().trim();
 
-  // Real Supabase product search
+  // Real Supabase product search with debounce
   useEffect(() => {
     if (q.length < 2) { setProductResults([]); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
-      const [{ data: byProduct }, { data: byLine }] = await Promise.all([
-        supabase
-          .from("products")
-          .select(`id, name, price_usd, product_lines ( id, name, category, brands ( name ) )`)
-          .ilike("name", `%${q}%`)
-          .limit(8),
-        supabase
-          .from("products")
-          .select(`id, name, price_usd, product_lines ( id, name, category, brands ( name ) )`)
-          .ilike("product_lines.name", `%${q}%`)
-          .limit(8),
-      ]);
 
-      const combined = [...(byProduct || []), ...(byLine || [])];
+      // Search product lines by name or brand name
+      const { data: lineData } = await supabase
+        .from("product_lines")
+        .select(`
+          id, name, category,
+          brands ( name ),
+          products ( id, name, price_usd )
+        `)
+        .or(`name.ilike.%${q}%`)
+        .limit(10);
+
+      // Also search brands by name
+      const { data: brandData } = await supabase
+        .from("product_lines")
+        .select(`
+          id, name, category,
+          brands ( name ),
+          products ( id, name, price_usd )
+        `)
+        .limit(50);
+
+      const allLines = [
+        ...(lineData || []),
+        ...(brandData || []).filter(pl =>
+          pl.brands?.name?.toLowerCase().includes(q)
+        ),
+      ];
+
+      // Deduplicate by product line id, then flatten to product rows
       const seen = new Set();
-      const unique = combined.filter(p => {
-        if (seen.has(p.id) || !p.product_lines) return false;
-        seen.add(p.id);
-        return true;
-      });
+      const results = [];
+      for (const pl of allLines) {
+        if (seen.has(pl.id)) continue;
+        seen.add(pl.id);
+        if (pl.products?.length > 0) {
+          // Use first SKU as the representative product
+          const sku = pl.products[0];
+          results.push({
+            id: sku.id,
+            name: pl.name,
+            brand: pl.brands?.name || "",
+            category: pl.category,
+            price: sku.price_usd ? `$${sku.price_usd}` : "",
+            emoji: categoryEmoji(pl.category),
+            color: categoryColor(pl.category),
+          });
+        }
+        if (results.length >= 6) break;
+      }
 
-      setProductResults(unique.slice(0, 6).map(p => ({
-        id: p.id,
-        name: p.product_lines.name,
-        brand: p.product_lines.brands?.name || "",
-        category: p.product_lines.category,
-        price: p.price_usd ? `$${p.price_usd}` : "",
-        emoji: categoryEmoji(p.product_lines.category),
-        color: categoryColor(p.product_lines.category),
-      })));
+      setProductResults(results);
       setSearching(false);
     }, 300);
     return () => clearTimeout(timer);
