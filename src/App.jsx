@@ -637,19 +637,24 @@ function FeedPostCard({ post, index }) {
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ products, theme, onThemeChange, onAddProduct }) {
+function ProfileTab({ user, products, theme, onThemeChange, onAddProduct }) {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  const displayName = user?.name || "My Cabinet";
+  const handle = user?.handle || "@myhandle";
+  const cabinetName = user?.cabinetName || `${displayName.split(" ")[0]}'s Cabinet`;
+  const initials = displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "ME";
 
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
       <div style={{ padding: "20px 20px 16px", background: "#FDFAF7" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
-          <div style={{ width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg, #D4A5A5, #A5B8C8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>ME</div>
+          <div style={{ width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg, #D4A5A5, #A5B8C8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>{initials}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A" }}>My Cabinet</div>
-            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{products.length} products · @myhandle</div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A" }}>{cabinetName}</div>
+            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{products.length} products · {handle}</div>
           </div>
           <button onClick={() => setShowThemePicker(true)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 500, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
             {theme.emoji} Style
@@ -1461,24 +1466,45 @@ function VerifyEmailScreen({ user, onVerified }) {
 // ── Onboarding ───────────────────────────────────────────────────────────────
 function OnboardingScreen({ user, onComplete }) {
   const [selectedTheme, setSelectedTheme] = useState(CABINET_THEMES[0].id);
+  const [cabinetName, setCabinetName] = useState(
+    user?.name ? `${user.name.split(" ")[0]}'s Cabinet` : "My Cabinet"
+  );
   const [loading, setLoading] = useState(false);
 
   const finish = async () => {
     setLoading(true);
     const theme = CABINET_THEMES.find(t => t.id === selectedTheme);
+    const finalName = cabinetName.trim() || (user?.name ? `${user.name.split(" ")[0]}'s Cabinet` : "My Cabinet");
     if (user?.id) {
-      await supabase.from("profiles").update({ onboarding_complete: true }).eq("id", user.id);
+      await supabase.from("profiles").update({
+        onboarding_complete: true,
+        cabinet_name: finalName,
+      }).eq("id", user.id);
     }
     setLoading(false);
-    onComplete(theme);
+    onComplete(theme, finalName);
   };
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#F7F5F2", animation: "fadeUp 0.4s ease", overflowY: "auto" }}>
       <div style={{ padding: "48px 24px 0", flex: 1 }}>
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#C8B8A2", letterSpacing: "0.15em", marginBottom: 10 }}>ALMOST THERE</div>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.15, marginBottom: 8 }}>Choose your style{user?.name ? `, ${user.name.split(" ")[0]}` : ""}</div>
-        <div style={{ fontSize: 14, color: "#AAA", lineHeight: 1.6, marginBottom: 36 }}>You can always change this later from your cabinet.</div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.15, marginBottom: 8 }}>Make it yours{user?.name ? `, ${user.name.split(" ")[0]}` : ""}</div>
+        <div style={{ fontSize: 14, color: "#AAA", lineHeight: 1.6, marginBottom: 28 }}>Name your cabinet, then pick your style.</div>
+
+        {/* Cabinet name input */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "#AAA", letterSpacing: "0.08em", marginBottom: 8 }}>CABINET NAME</div>
+          <input
+            value={cabinetName}
+            onChange={e => setCabinetName(e.target.value)}
+            maxLength={40}
+            style={{ width: "100%", padding: "14px 16px", background: "#FFF", border: "1.5px solid #E5E0D8", borderRadius: 12, fontSize: 15, color: "#1A1A1A", fontFamily: "'Cormorant Garamond', serif", fontWeight: 400 }}
+            onFocus={e => e.target.style.borderColor = "#C8B8A2"}
+            onBlur={e => e.target.style.borderColor = "#E5E0D8"}
+          />
+          <div style={{ fontSize: 11, color: "#CCC", fontFamily: "'DM Mono', monospace", marginTop: 6 }}>This appears on your profile. You can change it anytime.</div>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 36 }}>
           {CABINET_THEMES.map(theme => (
             <button key={theme.id} onClick={() => setSelectedTheme(theme.id)} style={{ background: theme.cabinetBg, border: selectedTheme === theme.id ? "3px solid #1A1A1A" : "2px solid transparent", borderRadius: 18, padding: "16px 14px 14px", cursor: "pointer", position: "relative", overflow: "hidden", transition: "transform 0.2s, border 0.2s", transform: selectedTheme === theme.id ? "scale(1.02)" : "scale(1)", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1517,13 +1543,14 @@ function AuthGate({ onAuthenticated }) {
     // Check for existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        supabase.from("profiles").select("display_name, username, avatar_url").eq("id", session.user.id).single()
+        supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name").eq("id", session.user.id).single()
           .then(({ data: profile }) => {
             onAuthenticated({
               id: session.user.id,
               email: session.user.email,
               name: profile?.display_name || session.user.email,
               handle: profile?.username ? "@" + profile.username : "@user",
+              cabinetName: profile?.cabinet_name || null,
             });
           });
       } else {
@@ -1547,7 +1574,7 @@ function AuthGate({ onAuthenticated }) {
   if (screen === "signup")     return <SignUpScreen onBack={() => setScreen("splash")} onSuccess={user => { setPendingUser(user); setScreen("verify"); }} />;
   if (screen === "forgot")     return <ForgotPasswordScreen onBack={() => setScreen("signin")} />;
   if (screen === "verify")     return <VerifyEmailScreen user={pendingUser} onVerified={() => setScreen("onboarding")} />;
-  if (screen === "onboarding") return <OnboardingScreen user={pendingUser} onComplete={theme => onAuthenticated({ ...pendingUser, cabinetTheme: theme })} />;
+  if (screen === "onboarding") return <OnboardingScreen user={pendingUser} onComplete={(theme, cabinetName) => onAuthenticated({ ...pendingUser, cabinetTheme: theme, cabinetName })} />;
   return null;
 }
 
@@ -1582,7 +1609,7 @@ export default function App() {
     {activeTab === "feed"    && <FeedTab />}
     {activeTab === "search"  && <SearchTab />}
     {activeTab === "explore" && <ExploreTab />}
-    {activeTab === "cabinet" && <ProfileTab products={myProducts} theme={cabinetTheme} onThemeChange={setCabinetTheme} onAddProduct={handleAddProduct} />}
+    {activeTab === "cabinet" && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={setCabinetTheme} onAddProduct={handleAddProduct} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
