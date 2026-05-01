@@ -354,13 +354,16 @@ function AddProductModal({ onClose, onAdd }) {
       const isBlackOwnedSearch = BLACK_OWNED_TERMS.some(t => sq.includes(t));
       const isIndieSearch = INDIE_TERMS.some(t => sq.includes(t));
 
-      const baseSelect = "id, name, category, brand_id, brands ( name, black_owned, is_indie ), products ( id, name, price_usd )";
+      const baseSelect = "id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )";
 
-      const { data: brandMatches } = await supabase
-        .from("brands")
-        .select("id")
-        .ilike("name", `%${sq}%`);
-      const brandIds = (brandMatches || []).map(b => b.id);
+      // Fetch brand IDs: name match + boolean flags — kept separate so booleans are exact
+      const brandQueries = [
+        supabase.from("brands").select("id").ilike("name", `%${sq}%`),
+        ...(isBlackOwnedSearch ? [supabase.from("brands").select("id").eq("black_owned", true)] : []),
+        ...(isIndieSearch      ? [supabase.from("brands").select("id").eq("is_indie", true)]   : []),
+      ];
+      const brandResults = await Promise.all(brandQueries);
+      const brandIds = [...new Set(brandResults.flatMap(r => (r.data || []).map(b => b.id)))];
 
       const queries = [
         supabase
@@ -377,9 +380,13 @@ function AddProductModal({ onClose, onAdd }) {
           .select(baseSelect)
           .ilike("search_tags::text", `%${sq}%`)
           .limit(12),
-        ...(isBlackOwnedSearch ? [supabase.from("product_lines").select(baseSelect).eq("brands.black_owned", true).limit(20)] : []),
-        ...(isIndieSearch ? [supabase.from("product_lines").select(baseSelect).eq("brands.is_indie", true).limit(20)] : []),
       ];
+
+      if ((isBlackOwnedSearch || isIndieSearch) && brandIds.length > 0) {
+        queries.push(
+          supabase.from("product_lines").select(baseSelect).in("brand_id", brandIds).limit(20)
+        );
+      }
 
       const results_raw = await Promise.all(queries);
 
@@ -790,19 +797,19 @@ function SearchTab() {
       const isBlackOwnedSearch = BLACK_OWNED_TERMS.some(t => q.includes(t));
       const isIndieSearch = INDIE_TERMS.some(t => q.includes(t));
 
-      const baseSelect = "id, name, category, brand_id, brands ( name, black_owned, is_indie ), products ( id, name, price_usd )";
+      const baseSelect = "id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )";
 
-      // Build all queries to run in parallel
-      const queries = [];
+      // Fetch brand IDs in parallel: name match + boolean flags
+      const brandQueries = [
+        supabase.from("brands").select("id").ilike("name", `%${q}%`),
+        ...(isBlackOwnedSearch ? [supabase.from("brands").select("id").eq("black_owned", true)] : []),
+        ...(isIndieSearch      ? [supabase.from("brands").select("id").eq("is_indie", true)]   : []),
+      ];
+      const brandResults = await Promise.all(brandQueries);
+      const brandIds = [...new Set(brandResults.flatMap(r => (r.data || []).map(b => b.id)))];
 
-      // 1. Text match on product name / description
-      const { data: brandMatches } = await supabase
-        .from("brands")
-        .select("id")
-        .ilike("name", `%${q}%`);
-      const brandIds = (brandMatches || []).map(b => b.id);
-
-      queries.push(
+      // Now query product_lines — brand IDs already correctly scoped
+      const queries = [
         supabase
           .from("product_lines")
           .select(baseSelect)
@@ -811,41 +818,28 @@ function SearchTab() {
               ? `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
               : `name.ilike.%${q}%,description.ilike.%${q}%`
           )
-          .limit(12)
-      );
-
-      // 2. Tag substring match (for KP, acne, 4c, etc.)
-      queries.push(
+          .limit(12),
         supabase
           .from("product_lines")
           .select(baseSelect)
           .ilike("search_tags::text", `%${q}%`)
-          .limit(12)
-      );
+          .limit(12),
+      ];
 
-      // 3. Boolean column matches — reliable, no string ambiguity
-      if (isBlackOwnedSearch) {
+      // For black-owned / indie searches, pull ALL products from those brands directly
+      if ((isBlackOwnedSearch || isIndieSearch) && brandIds.length > 0) {
         queries.push(
           supabase
             .from("product_lines")
             .select(baseSelect)
-            .eq("brands.black_owned", true)
-            .limit(20)
-        );
-      }
-      if (isIndieSearch) {
-        queries.push(
-          supabase
-            .from("product_lines")
-            .select(baseSelect)
-            .eq("brands.is_indie", true)
+            .in("brand_id", brandIds)
             .limit(20)
         );
       }
 
       const results_raw = await Promise.all(queries);
 
-      // Merge and deduplicate across all query results
+      // Merge and deduplicate
       const seen = new Set();
       const results = [];
       for (const { data } of results_raw) {
