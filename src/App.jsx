@@ -507,15 +507,22 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
               </div>
             )}
 
-            {/* ── Read-only repurchase (viewing someone else's) ── */}
-            {!isOwn && isRepurchase && (
+            {/* ── Read-only repurchase (viewing someone else's product) ── */}
+            {!isOwn && (
               <div style={{
                 display: "inline-flex", alignItems: "center", gap: 6,
-                background: "rgba(74,124,89,0.1)", border: "1px solid rgba(74,124,89,0.2)",
+                background: repurchaseRate !== null ? "rgba(74,124,89,0.1)" : "rgba(160,140,128,0.08)",
+                border: `1px solid ${repurchaseRate !== null ? "rgba(74,124,89,0.2)" : "rgba(160,140,128,0.2)"}`,
                 borderRadius: 20, padding: "7px 14px", marginBottom: 14,
               }}>
-                <span style={{ color: "#4A7C59", fontSize: 13 }}>↻</span>
-                <span style={{ fontSize: 12, color: "#4A7C59" }}>Would buy this again</span>
+                {repurchaseRate !== null ? (
+                  <>
+                    <span style={{ color: "#4A7C59", fontSize: 13 }}>↻</span>
+                    <span style={{ fontSize: 12, color: "#4A7C59" }}>{repurchaseRate}% would buy again</span>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 12, color: "#A89E94" }}>In their cabinet</span>
+                )}
               </div>
             )}
 
@@ -541,18 +548,17 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
               </div>
             )}
 
-            {/* ── Discovery stats (not owned) ── */}
+            {/* ── Discovery ambient pills (not owned) ── */}
             {!isOwn && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                {repurchaseRate !== null && (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 16, background: "rgba(74,124,89,0.08)", border: "1px solid rgba(74,124,89,0.18)" }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#4A7C59" }}>↻ {repurchaseRate}%</span>
-                    <span style={{ fontSize: 10, color: "#4A7C59", opacity: 0.7 }}>repurchase</span>
-                  </div>
-                )}
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 16, background: "#F5F0EA", border: "1px solid #EDE9E3" }}>
                   <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#888" }}>{categoryLabel}</span>
                 </div>
+                {product.price && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 16, background: "#F5F0EA", border: "1px solid #EDE9E3" }}>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#888" }}>{product.price}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -931,7 +937,7 @@ function FeedPostCard({ post, index }) {
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onSignOut, loading }) {
+function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRepurchaseChange, onSignOut, loading }) {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -969,20 +975,14 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
     setToast(null);
   };
 
-  const handleRepurchaseChange = async (product, status) => {
-    // Optimistic local update
-    const updated = products.map(p => p.id === product.id ? { ...p, status } : p);
-    // We need to update via parent — for now update the selected product display
-    setSelectedProduct(prev => prev ? { ...prev, status } : null);
-
-    // Persist to Supabase
-    if (user?.id && product.id) {
-      await supabase
-        .from("user_products")
-        .update({ status })
-        .eq("user_id", user.id)
-        .eq("product_id", product.id)
-        .is("deleted_at", null);
+  const handleRepurchase = (product, status) => {
+    // Update local selected product so modal reflects the change immediately
+    setSelectedProduct(prev => prev && prev.id === product.id ? { ...prev, status } : prev);
+    // Delegate to parent for persistent state update
+    onRepurchaseChange(product, status);
+    // If archiving, close modal after brief delay
+    if (status === "not_repurchase") {
+      setTimeout(() => setSelectedProduct(null), 400);
     }
   };
 
@@ -1080,7 +1080,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
       )}
 
       {showThemePicker && <ThemePicker current={theme} onSelect={onThemeChange} onClose={() => setShowThemePicker(false)} />}
-      {selectedProduct && <ProductDetailModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} onRepurchaseChange={handleRepurchaseChange} isOwn={true} />}
+      {selectedProduct && <ProductDetailModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} onRepurchaseChange={handleRepurchase} isOwn={true} />}
       {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={p => { onAddProduct(p); }} />}
     </div>
   );
@@ -1835,6 +1835,36 @@ function BottomNav({ active, onChange, onAddPress }) {
     { id: "cabinet",  label: "Cabinet",  icon: CabinetIcon },
   ];
 
+  const [fabVisible, setFabVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentY = window.scrollY || document.documentElement.scrollTop;
+          // Also check scroll on the nearest scrollable container
+          const scrollable = document.querySelector('[style*="overflow"]');
+          const scrollPos = scrollable ? scrollable.scrollTop : currentY;
+
+          if (scrollPos > lastScrollY.current + 8) {
+            setFabVisible(false); // scrolling down
+          } else if (scrollPos < lastScrollY.current - 8) {
+            setFabVisible(true); // scrolling up
+          }
+          lastScrollY.current = scrollPos;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    // Listen on capturing phase to catch scrolls on inner containers
+    document.addEventListener("scroll", handleScroll, true);
+    return () => document.removeEventListener("scroll", handleScroll, true);
+  }, []);
+
   return (
     <>
       <style>{`
@@ -1911,8 +1941,18 @@ function BottomNav({ active, onChange, onAddPress }) {
         }
       `}</style>
 
-      {/* FAB — floating, independent of nav */}
-      <button className="fab" onClick={onAddPress} aria-label="Add product">
+      {/* FAB — floating, hides on scroll down */}
+      <button
+        className="fab"
+        onClick={onAddPress}
+        aria-label="Add product"
+        style={{
+          transform: fabVisible ? "scale(1)" : "scale(0)",
+          opacity: fabVisible ? 1 : 0,
+          transition: "transform 0.25s cubic-bezier(0.34,1.56,0.64,1), opacity 0.2s ease",
+          pointerEvents: fabVisible ? "auto" : "none",
+        }}
+      >
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
           <path d="M11 4V18M4 11H18" stroke="#FFF" strokeWidth="2" strokeLinecap="round"/>
         </svg>
@@ -2595,6 +2635,22 @@ export default function App() {
     }
   };
 
+  // ── Change repurchase status: update local state + Supabase ────────────
+  const handleRepurchaseChange = async (product, status) => {
+    // Optimistic local update
+    setMyProducts(prev => prev.map(p => p.id === product.id ? { ...p, status } : p));
+
+    // Persist to Supabase
+    if (authedUser?.id && product.id) {
+      await supabase
+        .from("user_products")
+        .update({ status })
+        .eq("user_id", authedUser.id)
+        .eq("product_id", product.id)
+        .is("deleted_at", null);
+    }
+  };
+
   const shell = (children) => (
     <div style={{ maxWidth: 480, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative", overflow: "hidden" }}>
       <GlobalStyles />
@@ -2607,7 +2663,7 @@ export default function App() {
   return shell(<>
     {activeTab === "feed"     && <FeedTab />}
     {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} />}
-    {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onSignOut={handleSignOut} loading={loadingCabinet} />}
+    {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onRepurchaseChange={handleRepurchaseChange} onSignOut={handleSignOut} loading={loadingCabinet} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
