@@ -1197,6 +1197,7 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
   const [activeCategory, setActiveCategory] = useState(null);
   const [searching, setSearching]       = useState(false);
   const [addedIds, setAddedIds]         = useState(new Set(myProducts.map(p => p.id)));
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const inputRef = useRef(null);
   const q = query.toLowerCase().trim();
 
@@ -1405,7 +1406,7 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
           <div>
 
             {/* Phase 0/1 — Trending */}
-            <TrendingSection addedIds={addedIds} onAdd={handleAdd} />
+            <TrendingSection addedIds={addedIds} onAdd={handleAdd} onProductClick={setSelectedProduct} />
 
             {/* Category browse */}
             <div style={{ marginTop: 24 }}>
@@ -1451,6 +1452,7 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
                     index={i}
                     owned={addedIds.has(product.id)}
                     onAdd={() => handleAdd(product)}
+                    onProductClick={setSelectedProduct}
                     friendAvatars={friendAvatarsFor(product.id)}
                     repurchaseRate={repurchaseRateFor(product.id)}
                   />
@@ -1489,6 +1491,7 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
                       index={i}
                       owned={addedIds.has(product.id)}
                       onAdd={() => handleAdd(product)}
+                      onProductClick={setSelectedProduct}
                       friendAvatars={friendAvatarsFor(product.id)}
                       repurchaseRate={repurchaseRateFor(product.id)}
                     />
@@ -1537,6 +1540,16 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
           )
         )}
       </div>
+
+      {/* Product detail modal */}
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          isOwn={addedIds.has(selectedProduct.id)}
+          onAdd={(p) => { handleAdd(p); setSelectedProduct(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -1545,7 +1558,7 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
 // Phase 0: shows repurchase rate as signal
 // Phase 1/2: would show friend activity above (currently wired with mock signals)
 
-function TrendingSection({ addedIds, onAdd }) {
+function TrendingSection({ addedIds, onAdd, onProductClick }) {
   const trending = MOCK_PRODUCTS.slice(0, 6);
 
   return (
@@ -1559,6 +1572,7 @@ function TrendingSection({ addedIds, onAdd }) {
           index={i}
           owned={addedIds.has(product.id)}
           onAdd={() => onAdd(product)}
+          onProductClick={onProductClick}
           friendAvatars={friendAvatarsFor(product.id)}
           repurchaseRate={repurchaseRateFor(product.id)}
         />
@@ -1567,10 +1581,11 @@ function TrendingSection({ addedIds, onAdd }) {
   );
 }
 
-function TrendingRow({ product, rank, index, owned, onAdd, friendAvatars, repurchaseRate }) {
+function TrendingRow({ product, rank, index, owned, onAdd, onProductClick, friendAvatars, repurchaseRate }) {
   return (
     <div
       className="fade-up"
+      onClick={() => onProductClick && onProductClick(product)}
       style={{
         display: "flex", alignItems: "center", gap: 12,
         background: "#FFF", borderRadius: 14, padding: "12px 14px",
@@ -1613,10 +1628,11 @@ function TrendingRow({ product, rank, index, owned, onAdd, friendAvatars, repurc
 
 // ─── PRODUCT CARD (search results + category browse) ─────────────────────────
 
-function ProductCard({ product, index, owned, onAdd, friendAvatars, repurchaseRate }) {
+function ProductCard({ product, index, owned, onAdd, onProductClick, friendAvatars, repurchaseRate }) {
   return (
     <div
       className="fade-up"
+      onClick={() => onProductClick && onProductClick(product)}
       style={{
         display: "flex", alignItems: "center", gap: 12,
         background: "#FFF", borderRadius: 14, padding: "12px 14px",
