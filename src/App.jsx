@@ -765,9 +765,22 @@ function SearchTab() {
 
   // Real Supabase product search with debounce
   useEffect(() => {
-    if (q.length < 1) { setProductResults([]); return; }
+    if (q.length < 1) { setProductResults([]); setSearching(false); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
+
+      // Build tag variants to catch different storage formats:
+      // "black owned" → ["black owned", "black-owned", "black_owned"]
+      // "KP" → ["kp", "KP"] (raw q preserved for uppercase acronyms)
+      const rawQ = query.trim(); // preserve original casing for acronyms
+      const tagVariants = Array.from(new Set([
+        q,                                      // lowercased
+        rawQ,                                   // original casing
+        q.replace(/\s+/g, "-"),                // hyphenated
+        q.replace(/\s+/g, "_"),                // underscored
+        rawQ.replace(/\s+/g, "-"),
+        rawQ.replace(/\s+/g, "_"),
+      ]));
 
       // Find matching brand IDs
       const { data: brandMatches } = await supabase
@@ -777,29 +790,43 @@ function SearchTab() {
 
       const brandIds = (brandMatches || []).map(b => b.id);
 
-      // Search product lines by name, description, tags, or brand
-      let queryBuilder = supabase
+      // Run tag searches in parallel for all variants (cs is case-sensitive, so we need this)
+      const tagQueries = tagVariants.map(variant =>
+        supabase
+          .from("product_lines")
+          .select(`id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )`)
+          .contains("search_tags", [variant])
+          .limit(12)
+      );
+
+      // Main text + brand search
+      let mainBuilder = supabase
         .from("product_lines")
         .select(`id, name, category, brand_id, description, brands ( name ), products ( id, name, price_usd )`)
         .limit(12);
 
-      const tagFilter = `search_tags.cs.{${q}}`;
-
       if (brandIds.length > 0) {
-        queryBuilder = queryBuilder.or(
-          `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")}),${tagFilter}`
+        mainBuilder = mainBuilder.or(
+          `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
         );
       } else {
-        queryBuilder = queryBuilder.or(
-          `name.ilike.%${q}%,description.ilike.%${q}%,${tagFilter}`
+        mainBuilder = mainBuilder.or(
+          `name.ilike.%${q}%,description.ilike.%${q}%`
         );
       }
 
-      const { data: lineData } = await queryBuilder;
+      // Run everything in parallel
+      const [mainResult, ...tagResults] = await Promise.all([mainBuilder, ...tagQueries]);
+
+      // Merge and deduplicate all results
+      const allLines = [
+        ...(mainResult.data || []),
+        ...tagResults.flatMap(r => r.data || []),
+      ];
 
       const seen = new Set();
       const results = [];
-      for (const pl of (lineData || [])) {
+      for (const pl of allLines) {
         if (seen.has(pl.id)) continue;
         seen.add(pl.id);
         if (pl.products?.length > 0) {
@@ -814,7 +841,7 @@ function SearchTab() {
             color: categoryColor(pl.category),
           });
         }
-        if (results.length >= 6) break;
+        if (results.length >= 12) break;
       }
 
       setProductResults(results);
@@ -860,7 +887,7 @@ function SearchTab() {
 
   const userResults = q.length > 0 ? MOCK_USERS.filter(u => u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q) || u.bio.toLowerCase().includes(q)) : [];
   const topicResults = q.length > 0 ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : [];
-  const hasResults = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
+  const hasResults = searching || userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
   const showPeople = activeFilter === "all" || activeFilter === "people";
   const showProducts = activeFilter === "all" || activeFilter === "products";
   const showTopics = activeFilter === "all" || activeFilter === "topics";
@@ -885,92 +912,121 @@ function SearchTab() {
         )}
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 100px" }}>
+
+        {/* ── EMPTY STATE: category browse only, no suggested cabinets ── */}
         {query.length === 0 && (
           <div>
             <div style={{ paddingTop: 20 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 14 }}>SUGGESTED CABINETS</div>
-              {MOCK_USERS.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />)}
-            </div>
-            <div style={{ marginTop: 24 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 14 }}>BROWSE TOPICS</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {CATEGORIES.map(cat => (
-                  <button key={cat.id} onClick={() => handleTopicTap(cat)} style={{ background: activeCategory === cat.id ? cat.color + "66" : cat.color + "28", border: `1.5px solid ${cat.color}${activeCategory === cat.id ? "CC" : "66"}`, borderRadius: 20, padding: "8px 16px", fontSize: 13, fontWeight: 500, color: "#555" }}>{cat.icon} {cat.label}</button>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 14 }}>BROWSE BY CATEGORY</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
+                {CATEGORIES.map((cat, i) => (
+                  <button key={cat.id} className="fade-up" onClick={() => handleTopicTap(cat)} style={{
+                    background: activeCategory === cat.id ? cat.color + "55" : "#FFF",
+                    border: `1.5px solid ${activeCategory === cat.id ? cat.color + "CC" : "#EDE9E3"}`,
+                    borderRadius: 16, padding: "14px 8px", display: "flex", flexDirection: "column",
+                    alignItems: "center", gap: 8, cursor: "pointer", transition: "all 0.18s",
+                    animationDelay: `${i * 0.04}s`, opacity: 0,
+                  }}>
+                    <div style={{ width: 38, height: 38, background: cat.color + "33", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{cat.icon}</div>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "#555", textAlign: "center", fontFamily: "'Jost', sans-serif" }}>{cat.label}</span>
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Category browse results */}
+            {/* Category browse results — full product list, no topic filter gate */}
             {activeCategory && (
-              <div style={{ marginTop: 20 }}>
+              <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em" }}>
                     {CATEGORIES.find(c => c.id === activeCategory)?.label.toUpperCase()}
                   </div>
-                  <button onClick={clearCategory} style={{ background: "none", border: "none", color: "#AAA", fontSize: 12, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>clear</button>
+                  <button onClick={clearCategory} style={{ background: "none", border: "none", color: "#C8B8A2", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em" }}>CLEAR ✕</button>
                 </div>
                 {categoryResults.length === 0 && (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "#CCC", fontSize: 13 }}>loading...</div>
+                  <div style={{ padding: "24px 0" }}>
+                    {[1,2,3,4].map(i => (
+                      <div key={i} className="skeleton" style={{ height: 74, borderRadius: 14, marginBottom: 8 }} />
+                    ))}
+                  </div>
                 )}
                 {categoryResults.map((product, i) => (
-                  <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.04}s`, opacity: 0 }}>
-                    <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{product.emoji}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
-                      <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{product.brand} · {product.price}</div>
-                    </div>
-                    <span style={{ background: "#F5F0EB", color: "#888", fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0, textTransform: "capitalize" }}>{product.category}</span>
-                  </div>
+                  <ProductRow key={product.id} product={product} index={i} />
                 ))}
               </div>
             )}
           </div>
         )}
-        {query.length > 0 && !hasResults && (
-          <div style={{ textAlign: "center", padding: "56px 0", color: "#CCC" }}>
-            <div style={{ fontSize: 36, marginBottom: 10 }}>✦</div>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, marginBottom: 6 }}>No results for "{query}"</div>
-            <div style={{ fontSize: 13, color: "#CCC" }}>Try a product name, brand, or @handle</div>
-          </div>
-        )}
-        {showPeople && userResults.length > 0 && (
-          <div style={{ paddingTop: 20 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PEOPLE</div>
-            {userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />)}
-          </div>
-        )}
-        {showProducts && productResults.length > 0 && (
-          <div style={{ paddingTop: 20 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PRODUCTS</div>
-            {searching && <div style={{ textAlign: "center", padding: "20px 0", color: "#CCC", fontSize: 13 }}>searching...</div>}
-            {productResults.map((product, i) => (
-              <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
-                <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{product.emoji}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
-                  <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{product.brand} · {product.price}</div>
+
+        {/* ── ACTIVE SEARCH STATE ── */}
+        {query.length > 0 && (
+
+          /* No results */
+          !hasResults && !searching ? (
+            <div style={{ textAlign: "center", padding: "56px 0", color: "#CCC" }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>✦</div>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, marginBottom: 6 }}>No results for "{query}"</div>
+              <div style={{ fontSize: 13, color: "#CCC" }}>Try a product name, brand, skin concern, or @handle</div>
+            </div>
+          ) : (
+            <div>
+              {/* PRODUCTS — always first when searching */}
+              {showProducts && (searching || productResults.length > 0) && (
+                <div style={{ paddingTop: 20 }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PRODUCTS</div>
+                  {searching && productResults.length === 0 && (
+                    <div style={{ padding: "4px 0 8px" }}>
+                      {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 74, borderRadius: 14, marginBottom: 8 }} />)}
+                    </div>
+                  )}
+                  {productResults.map((product, i) => (
+                    <ProductRow key={product.id} product={product} index={i} />
+                  ))}
                 </div>
-                <span style={{ background: "#F5F0EB", color: "#888", fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0, textTransform: "capitalize" }}>{product.category}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        {showTopics && topicResults.length > 0 && (
-          <div style={{ paddingTop: 20 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>TOPICS</div>
-            {topicResults.map((cat, i) => (
-              <div key={cat.id} className="fade-up" onClick={() => handleTopicTap(cat)} style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "14px 16px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
-                <div style={{ width: 44, height: 44, borderRadius: "50%", background: cat.color + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{cat.icon}</div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1A1A" }}>{cat.label}</div>
-                  <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>browse {cat.label.toLowerCase()} products →</div>
+              )}
+
+              {/* TOPICS — second */}
+              {showTopics && topicResults.length > 0 && (
+                <div style={{ paddingTop: 20 }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>TOPICS</div>
+                  {topicResults.map((cat, i) => (
+                    <div key={cat.id} className="fade-up" onClick={() => handleTopicTap(cat)} style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "14px 16px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: "50%", background: cat.color + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{cat.icon}</div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1A1A" }}>{cat.label}</div>
+                        <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>browse {cat.label.toLowerCase()} products →</div>
+                      </div>
+                      <span style={{ marginLeft: "auto", fontSize: 18, color: "#DDD" }}>›</span>
+                    </div>
+                  ))}
                 </div>
-                <span style={{ marginLeft: "auto", fontSize: 18, color: "#DDD" }}>›</span>
-              </div>
-            ))}
-          </div>
+              )}
+
+              {/* PEOPLE — last */}
+              {showPeople && userResults.length > 0 && (
+                <div style={{ paddingTop: 20 }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PEOPLE</div>
+                  {userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />)}
+                </div>
+              )}
+            </div>
+          )
         )}
       </div>
+    </div>
+  );
+}
+
+// Shared product row used in both category browse and search results
+function ProductRow({ product, index = 0 }) {
+  return (
+    <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px 14px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${index * 0.04}s`, opacity: 0, transition: "background 0.15s" }}>
+      <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, boxShadow: `0 3px 10px ${product.color}44` }}>{product.emoji}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A", marginBottom: 2 }}>{product.name}</div>
+        <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{product.brand}{product.price ? ` · ${product.price}` : ""}</div>
+      </div>
+      <span style={{ background: "#F5F0EB", color: "#888", fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0, textTransform: "capitalize" }}>{product.category}</span>
     </div>
   );
 }
