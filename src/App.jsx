@@ -341,6 +341,9 @@ function AddProductModal({ onClose, onAdd }) {
   const [adding, setAdding] = useState(false);
   const [searching, setSearching] = useState(false);
 
+  const BLACK_OWNED_TERMS = ["black owned", "black-owned", "blackowned", "black brand", "black beauty"];
+  const INDIE_TERMS = ["indie", "independent", "indie brand"];
+
   // Real Supabase product search with debounce
   useEffect(() => {
     if (searchQuery.length < 1) { setResults([]); return; }
@@ -348,52 +351,59 @@ function AddProductModal({ onClose, onAdd }) {
     const timer = setTimeout(async () => {
       setSearching(true);
 
+      const isBlackOwnedSearch = BLACK_OWNED_TERMS.some(t => sq.includes(t));
+      const isIndieSearch = INDIE_TERMS.some(t => sq.includes(t));
+
+      const baseSelect = "id, name, category, brand_id, brands ( name, black_owned, is_indie ), products ( id, name, price_usd )";
+
       const { data: brandMatches } = await supabase
         .from("brands")
         .select("id")
         .ilike("name", `%${sq}%`);
-
       const brandIds = (brandMatches || []).map(b => b.id);
 
-      const baseSelect = "id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )";
+      const queries = [
+        supabase
+          .from("product_lines")
+          .select(baseSelect)
+          .or(
+            brandIds.length > 0
+              ? `name.ilike.%${sq}%,description.ilike.%${sq}%,brand_id.in.(${brandIds.join(",")})`
+              : `name.ilike.%${sq}%,description.ilike.%${sq}%`
+          )
+          .limit(12),
+        supabase
+          .from("product_lines")
+          .select(baseSelect)
+          .ilike("search_tags::text", `%${sq}%`)
+          .limit(12),
+        ...(isBlackOwnedSearch ? [supabase.from("product_lines").select(baseSelect).eq("brands.black_owned", true).limit(20)] : []),
+        ...(isIndieSearch ? [supabase.from("product_lines").select(baseSelect).eq("brands.is_indie", true).limit(20)] : []),
+      ];
 
-      const textQuery = supabase
-        .from("product_lines")
-        .select(baseSelect)
-        .or(
-          brandIds.length > 0
-            ? `name.ilike.%${sq}%,description.ilike.%${sq}%,brand_id.in.(${brandIds.join(",")})`
-            : `name.ilike.%${sq}%,description.ilike.%${sq}%`
-        )
-        .limit(12);
-
-      const tagQuery = supabase
-        .from("product_lines")
-        .select(baseSelect)
-        .ilike("search_tags::text", `%${sq}%`)
-        .limit(12);
-
-      const [{ data: textData }, { data: tagData }] = await Promise.all([textQuery, tagQuery]);
+      const results_raw = await Promise.all(queries);
 
       const seen = new Set();
       const normalized = [];
-      for (const pl of [...(textData || []), ...(tagData || [])]) {
-        if (seen.has(pl.id)) continue;
-        seen.add(pl.id);
-        if (pl.products?.length > 0) {
-          const sku = pl.products[0];
-          normalized.push({
-            id: sku.id,
-            name: pl.name,
-            sku: sku.name,
-            brand: pl.brands?.name || "",
-            category: pl.category,
-            price: sku.price_usd ? `$${sku.price_usd}` : "",
-            emoji: categoryEmoji(pl.category),
-            color: categoryColor(pl.category),
-          });
+      for (const { data } of results_raw) {
+        for (const pl of (data || [])) {
+          if (seen.has(pl.id)) continue;
+          seen.add(pl.id);
+          if (pl.products?.length > 0) {
+            const sku = pl.products[0];
+            normalized.push({
+              id: sku.id,
+              name: pl.name,
+              sku: sku.name,
+              brand: pl.brands?.name || "",
+              category: pl.category,
+              price: sku.price_usd ? `$${sku.price_usd}` : "",
+              emoji: categoryEmoji(pl.category),
+              color: categoryColor(pl.category),
+            });
+          }
+          if (normalized.length >= 20) break;
         }
-        if (normalized.length >= 12) break;
       }
 
       setResults(normalized);
@@ -767,63 +777,94 @@ function SearchTab() {
   const inputRef = useRef(null);
   const q = query.toLowerCase().trim();
 
+  // Keywords that map to boolean brand columns — no tag guessing needed
+  const BLACK_OWNED_TERMS = ["black owned", "black-owned", "blackowned", "black brand", "black beauty"];
+  const INDIE_TERMS = ["indie", "independent", "indie brand"];
+
   // Real Supabase product search with debounce
   useEffect(() => {
     if (q.length < 1) { setProductResults([]); setSearching(false); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
 
-      // Find matching brand IDs (case-insensitive)
+      const isBlackOwnedSearch = BLACK_OWNED_TERMS.some(t => q.includes(t));
+      const isIndieSearch = INDIE_TERMS.some(t => q.includes(t));
+
+      const baseSelect = "id, name, category, brand_id, brands ( name, black_owned, is_indie ), products ( id, name, price_usd )";
+
+      // Build all queries to run in parallel
+      const queries = [];
+
+      // 1. Text match on product name / description
       const { data: brandMatches } = await supabase
         .from("brands")
         .select("id")
         .ilike("name", `%${q}%`);
-
       const brandIds = (brandMatches || []).map(b => b.id);
 
-      // search_tags is a text[] column. Supabase's .cs() is exact/case-sensitive —
-      // "black" won't match "Black-owned". Instead we cast the array to text and
-      // use ilike so any substring matches regardless of casing or hyphenation.
-      // Run text+brand search and tag substring search in parallel.
-      const baseSelect = "id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )";
+      queries.push(
+        supabase
+          .from("product_lines")
+          .select(baseSelect)
+          .or(
+            brandIds.length > 0
+              ? `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
+              : `name.ilike.%${q}%,description.ilike.%${q}%`
+          )
+          .limit(12)
+      );
 
-      const textQuery = supabase
-        .from("product_lines")
-        .select(baseSelect)
-        .or(
-          brandIds.length > 0
-            ? `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
-            : `name.ilike.%${q}%,description.ilike.%${q}%`
-        )
-        .limit(12);
+      // 2. Tag substring match (for KP, acne, 4c, etc.)
+      queries.push(
+        supabase
+          .from("product_lines")
+          .select(baseSelect)
+          .ilike("search_tags::text", `%${q}%`)
+          .limit(12)
+      );
 
-      // Cast search_tags array to text then ilike — catches any tag containing the query
-      const tagQuery = supabase
-        .from("product_lines")
-        .select(baseSelect)
-        .ilike("search_tags::text", `%${q}%`)
-        .limit(12);
+      // 3. Boolean column matches — reliable, no string ambiguity
+      if (isBlackOwnedSearch) {
+        queries.push(
+          supabase
+            .from("product_lines")
+            .select(baseSelect)
+            .eq("brands.black_owned", true)
+            .limit(20)
+        );
+      }
+      if (isIndieSearch) {
+        queries.push(
+          supabase
+            .from("product_lines")
+            .select(baseSelect)
+            .eq("brands.is_indie", true)
+            .limit(20)
+        );
+      }
 
-      const [{ data: textData }, { data: tagData }] = await Promise.all([textQuery, tagQuery]);
+      const results_raw = await Promise.all(queries);
 
-      // Merge and deduplicate
+      // Merge and deduplicate across all query results
       const seen = new Set();
       const results = [];
-      for (const pl of [...(textData || []), ...(tagData || [])]) {
-        if (seen.has(pl.id)) continue;
-        seen.add(pl.id);
-        if (pl.products?.length > 0) {
-          results.push({
-            id: pl.products[0].id,
-            name: pl.name,
-            brand: pl.brands?.name || "",
-            category: pl.category,
-            price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
-            emoji: categoryEmoji(pl.category),
-            color: categoryColor(pl.category),
-          });
+      for (const { data } of results_raw) {
+        for (const pl of (data || [])) {
+          if (seen.has(pl.id)) continue;
+          seen.add(pl.id);
+          if (pl.products?.length > 0) {
+            results.push({
+              id: pl.products[0].id,
+              name: pl.name,
+              brand: pl.brands?.name || "",
+              category: pl.category,
+              price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
+              emoji: categoryEmoji(pl.category),
+              color: categoryColor(pl.category),
+            });
+          }
+          if (results.length >= 20) break;
         }
-        if (results.length >= 12) break;
       }
 
       setProductResults(results);
