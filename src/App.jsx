@@ -757,6 +757,8 @@ function SearchTab() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
   const [productResults, setProductResults] = useState([]);
+  const [categoryResults, setCategoryResults] = useState([]);
+  const [activeCategory, setActiveCategory] = useState(null);
   const [searching, setSearching] = useState(false);
   const inputRef = useRef(null);
   const q = query.toLowerCase().trim();
@@ -821,6 +823,41 @@ function SearchTab() {
     return () => clearTimeout(timer);
   }, [q]);
 
+  // Category browse — triggered by topic tag taps
+  useEffect(() => {
+    if (!activeCategory) { setCategoryResults([]); return; }
+    supabase
+      .from("product_lines")
+      .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
+      .eq("category", activeCategory)
+      .limit(20)
+      .then(({ data }) => {
+        const results = (data || [])
+          .filter(pl => pl.products?.length > 0)
+          .map(pl => ({
+            id: pl.products[0].id,
+            name: pl.name,
+            brand: pl.brands?.name || "",
+            category: pl.category,
+            price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
+            emoji: categoryEmoji(pl.category),
+            color: categoryColor(pl.category),
+          }));
+        setCategoryResults(results);
+      });
+  }, [activeCategory]);
+
+  const handleTopicTap = (cat) => {
+    setQuery("");
+    setActiveCategory(cat.id);
+    setProductResults([]);
+  };
+
+  const clearCategory = () => {
+    setActiveCategory(null);
+    setCategoryResults([]);
+  };
+
   const userResults = q.length > 0 ? MOCK_USERS.filter(u => u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q) || u.bio.toLowerCase().includes(q)) : [];
   const topicResults = q.length > 0 ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : [];
   const hasResults = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
@@ -857,9 +894,36 @@ function SearchTab() {
             <div style={{ marginTop: 24 }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 14 }}>BROWSE TOPICS</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {CATEGORIES.map(cat => <button key={cat.id} onClick={() => setQuery(cat.label)} style={{ background: cat.color + "28", border: `1.5px solid ${cat.color}66`, borderRadius: 20, padding: "8px 16px", fontSize: 13, fontWeight: 500, color: "#555" }}>{cat.icon} {cat.label}</button>)}
+                {CATEGORIES.map(cat => (
+                  <button key={cat.id} onClick={() => handleTopicTap(cat)} style={{ background: activeCategory === cat.id ? cat.color + "66" : cat.color + "28", border: `1.5px solid ${cat.color}${activeCategory === cat.id ? "CC" : "66"}`, borderRadius: 20, padding: "8px 16px", fontSize: 13, fontWeight: 500, color: "#555" }}>{cat.icon} {cat.label}</button>
+                ))}
               </div>
             </div>
+
+            {/* Category browse results */}
+            {activeCategory && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em" }}>
+                    {CATEGORIES.find(c => c.id === activeCategory)?.label.toUpperCase()}
+                  </div>
+                  <button onClick={clearCategory} style={{ background: "none", border: "none", color: "#AAA", fontSize: 12, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>clear</button>
+                </div>
+                {categoryResults.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "24px 0", color: "#CCC", fontSize: 13 }}>loading...</div>
+                )}
+                {categoryResults.map((product, i) => (
+                  <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.04}s`, opacity: 0 }}>
+                    <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{product.emoji}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
+                      <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{product.brand} · {product.price}</div>
+                    </div>
+                    <span style={{ background: "#F5F0EB", color: "#888", fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0, textTransform: "capitalize" }}>{product.category}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {query.length > 0 && !hasResults && (
@@ -895,11 +959,11 @@ function SearchTab() {
           <div style={{ paddingTop: 20 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>TOPICS</div>
             {topicResults.map((cat, i) => (
-              <div key={cat.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "14px 16px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
+              <div key={cat.id} className="fade-up" onClick={() => handleTopicTap(cat)} style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "14px 16px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
                 <div style={{ width: 44, height: 44, borderRadius: "50%", background: cat.color + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{cat.icon}</div>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1A1A" }}>{cat.label}</div>
-                  <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>Browse cabinets with {cat.label.toLowerCase()} products</div>
+                  <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>browse {cat.label.toLowerCase()} products →</div>
                 </div>
                 <span style={{ marginLeft: "auto", fontSize: 18, color: "#DDD" }}>›</span>
               </div>
