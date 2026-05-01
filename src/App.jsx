@@ -1538,14 +1538,19 @@ function UserRow({ user, index = 0, onTap }) {
 // Fixed position with iOS safe area insets.
 // Drop-in replacement for the existing BottomNav component in App.jsx.
 
+// ─── BOTTOM NAV — 3 tabs + FAB ────────────────────────────────────────────────
+// Three clean, evenly-spaced tabs. Add lives as a floating action button
+// in the bottom-right corner, independent of the nav bar.
+
 function BottomNav({ active, onChange, onAddPress }) {
-  const LEFT_TABS  = [{ id: "feed",    label: "Feed",     icon: FeedIcon    }];
-  const RIGHT_TABS = [{ id: "cabinet", label: "Cabinet",  icon: CabinetIcon }];
-  const DISCOVER   =  { id: "discover", label: "Discover", icon: DiscoverIcon };
+  const TABS = [
+    { id: "feed",     label: "Feed",     icon: FeedIcon },
+    { id: "discover", label: "Discover", icon: DiscoverIcon },
+    { id: "cabinet",  label: "Cabinet",  icon: CabinetIcon },
+  ];
 
   return (
     <>
-      {/* iOS safe-area style injection */}
       <style>{`
         .bottom-nav {
           position: fixed;
@@ -1557,11 +1562,12 @@ function BottomNav({ active, onChange, onAddPress }) {
           background: rgba(253, 250, 247, 0.97);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          border-top: 1px solid #EDE9E3;
+          border-top: 0.5px solid #EDE9E3;
           display: flex;
           align-items: center;
-          padding: 10px 0 0;
-          padding-bottom: calc(16px + env(safe-area-inset-bottom));
+          justify-content: space-around;
+          padding: 10px 24px 0;
+          padding-bottom: calc(14px + env(safe-area-inset-bottom));
           z-index: 50;
         }
         .nav-tab-btn {
@@ -1576,17 +1582,17 @@ function BottomNav({ active, onChange, onAddPress }) {
           cursor: pointer;
           position: relative;
           -webkit-tap-highlight-color: transparent;
-          transition: opacity 0.15s ease;
         }
-        .nav-tab-btn:active { opacity: 0.65; }
+        .nav-tab-btn:active { opacity: 0.6; }
         .nav-tab-indicator {
           position: absolute;
           top: -10px;
-          width: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 18px;
           height: 2px;
           background: #1A1A1A;
           border-radius: 0 0 2px 2px;
-          transition: opacity 0.2s ease, transform 0.2s ease;
         }
         .nav-tab-label {
           font-family: 'DM Mono', monospace;
@@ -1595,113 +1601,65 @@ function BottomNav({ active, onChange, onAddPress }) {
           letter-spacing: 0.05em;
           transition: color 0.2s ease;
         }
-        .add-btn-wrap {
-          flex: 1;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-        .add-btn {
-          width: 50px;
-          height: 50px;
+        .fab {
+          position: fixed;
+          bottom: calc(80px + env(safe-area-inset-bottom));
+          right: max(16px, calc((100vw - 480px) / 2 + 16px));
+          width: 52px;
+          height: 52px;
           background: #1A1A1A;
           border: none;
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 18px rgba(26,26,26,0.20);
+          box-shadow: 0 4px 20px rgba(26,26,26,0.24), 0 1px 4px rgba(26,26,26,0.12);
           cursor: pointer;
-          margin-bottom: 2px;
+          z-index: 51;
           -webkit-tap-highlight-color: transparent;
           transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s ease;
         }
-        .add-btn:active {
-          transform: scale(0.91);
-          box-shadow: 0 2px 10px rgba(26,26,26,0.15);
+        .fab:active {
+          transform: scale(0.9);
+          box-shadow: 0 2px 10px rgba(26,26,26,0.18);
         }
       `}</style>
 
+      {/* FAB — floating, independent of nav */}
+      <button className="fab" onClick={onAddPress} aria-label="Add product">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M11 4V18M4 11H18" stroke="#FFF" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </button>
+
+      {/* Tab bar — 3 equal tabs */}
       <nav className="bottom-nav">
-        {/* Left: Feed */}
-        {LEFT_TABS.map(tab => (
-          <NavTab
-            key={tab.id}
-            tab={tab}
-            active={active === tab.id}
-            onChange={onChange}
-          />
-        ))}
-
-        {/* Left-centre: Discover */}
-        <NavTab
-          tab={DISCOVER}
-          active={active === DISCOVER.id}
-          onChange={onChange}
-        />
-
-        {/* Centre: Add button */}
-        <div className="add-btn-wrap">
+        {TABS.map(tab => (
           <button
-            className="add-btn"
-            onClick={onAddPress}
-            aria-label="Add product"
-          >
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-              <path d="M11 4V18M4 11H18" stroke="#FFF" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Right: Cabinet */}
-        {RIGHT_TABS.map(tab => (
-          <NavTab
             key={tab.id}
-            tab={tab}
-            active={active === tab.id}
-            onChange={onChange}
-          />
+            className="nav-tab-btn"
+            onClick={() => onChange(tab.id)}
+            aria-label={tab.label}
+            aria-current={active === tab.id ? "page" : undefined}
+          >
+            {active === tab.id && <div className="nav-tab-indicator" />}
+            <tab.icon active={active === tab.id} />
+            <span className="nav-tab-label" style={{ color: active === tab.id ? "#1A1A1A" : "#C8C0B8" }}>
+              {tab.label}
+            </span>
+          </button>
         ))}
       </nav>
     </>
   );
 }
 
-// ─── NAV TAB ─────────────────────────────────────────────────────────────────
-
-function NavTab({ tab, active, onChange }) {
-  const Icon = tab.icon;
-  return (
-    <button
-      className="nav-tab-btn"
-      onClick={() => onChange(tab.id)}
-      aria-label={tab.label}
-      aria-current={active ? "page" : undefined}
-    >
-      {active && <div className="nav-tab-indicator" />}
-      <Icon active={active} />
-      <span
-        className="nav-tab-label"
-        style={{ color: active ? "#1A1A1A" : "#C8C0B8" }}
-      >
-        {tab.label}
-      </span>
-    </button>
-  );
-}
-
 // ─── ICONS ───────────────────────────────────────────────────────────────────
-// SVG icons — clean, consistent weight, matches cabinet. aesthetic
 
 function FeedIcon({ active }) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path
-        d="M3 5h14M3 10h14M3 15h8"
-        stroke={active ? "#1A1A1A" : "#C8C0B8"}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+      <path d="M3 5h14M3 10h14M3 15h8" stroke={active ? "#1A1A1A" : "#C8C0B8"} strokeWidth="1.6" strokeLinecap="round"/>
     </svg>
   );
 }
@@ -1709,19 +1667,8 @@ function FeedIcon({ active }) {
 function DiscoverIcon({ active }) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <circle
-        cx="9"
-        cy="9"
-        r="5.5"
-        stroke={active ? "#1A1A1A" : "#C8C0B8"}
-        strokeWidth="1.6"
-      />
-      <path
-        d="M14 14L17 17"
-        stroke={active ? "#1A1A1A" : "#C8C0B8"}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+      <circle cx="9" cy="9" r="5.5" stroke={active ? "#1A1A1A" : "#C8C0B8"} strokeWidth="1.6"/>
+      <path d="M14 14L17 17" stroke={active ? "#1A1A1A" : "#C8C0B8"} strokeWidth="1.6" strokeLinecap="round"/>
     </svg>
   );
 }
@@ -1729,25 +1676,8 @@ function DiscoverIcon({ active }) {
 function CabinetIcon({ active }) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <rect
-        x="3"
-        y="2.5"
-        width="14"
-        height="15"
-        rx="2"
-        stroke={active ? "#1A1A1A" : "#C8C0B8"}
-        strokeWidth="1.6"
-      />
-      <path
-        d="M3 7h14"
-        stroke={active ? "#1A1A1A" : "#C8C0B8"}
-        strokeWidth="1.6"
-      />
-      <path
-        d="M3 12h14"
-        stroke={active ? "#1A1A1A" : "#C8C0B8"}
-        strokeWidth="1.6"
-      />
+      <rect x="3" y="2.5" width="14" height="15" rx="2" stroke={active ? "#1A1A1A" : "#C8C0B8"} strokeWidth="1.6"/>
+      <path d="M3 7h14M3 12h14" stroke={active ? "#1A1A1A" : "#C8C0B8"} strokeWidth="1.6"/>
       <circle cx="10" cy="9.5" r="1" fill={active ? "#1A1A1A" : "#C8C0B8"} />
     </svg>
   );
