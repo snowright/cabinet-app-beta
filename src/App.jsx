@@ -904,33 +904,51 @@ function UserProfileView({ user, onBack }) {
 
 // ─── SEARCH TAB ──────────────────────────────────────────────────────────────
 
-function SearchTab() {
-  const [query, setQuery] = useState("");
+// ─── DISCOVER TAB ─────────────────────────────────────────────────────────────
+// Replaces both SearchTab and ExploreTab.
+// - Before typing: trending products (Phase 0) or friend activity (Phase 1/2)
+// - While typing: products + people + categories with signal hierarchy
+// - Signal rule: friend avatars > repurchase % > nothing. Never two at once.
+// - No price shown on any card. Price lives on product detail only.
+//
+// Props expected from App.jsx:
+//   myProducts  — array of products in the authed user's cabinet (for owned state)
+//   onAddProduct — (product) => void — called when user taps + Add
+//
+// The component reads MOCK_USERS and CATEGORIES from the existing App.jsx globals.
+// Supabase search logic is preserved from the original SearchTab verbatim.
+
+function DiscoverTab({ myProducts = [], onAddProduct }) {
+  const [query, setQuery]               = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
   const [productResults, setProductResults] = useState([]);
   const [categoryResults, setCategoryResults] = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
-  const [searching, setSearching] = useState(false);
+  const [searching, setSearching]       = useState(false);
+  const [addedIds, setAddedIds]         = useState(new Set(myProducts.map(p => p.id)));
   const inputRef = useRef(null);
   const q = query.toLowerCase().trim();
 
-  // Keywords that map to boolean brand columns — no tag guessing needed
-  const BLACK_OWNED_TERMS = ["black owned", "black-owned", "blackowned", "black brand", "black beauty"];
-  const INDIE_TERMS = ["indie", "independent", "indie brand"];
+  // Keep addedIds in sync when myProducts changes
+  useEffect(() => {
+    setAddedIds(new Set(myProducts.map(p => p.id)));
+  }, [myProducts]);
 
-  // Real Supabase product search with debounce
+  // ── Keyword helpers (preserved from SearchTab) ───────────────────────────
+  const BLACK_OWNED_TERMS = ["black owned", "black-owned", "blackowned", "black brand", "black beauty"];
+  const INDIE_TERMS       = ["indie", "independent", "indie brand"];
+
+  // ── Supabase product search with debounce (preserved from SearchTab) ─────
   useEffect(() => {
     if (q.length < 1) { setProductResults([]); setSearching(false); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
 
       const isBlackOwnedSearch = BLACK_OWNED_TERMS.some(t => q.includes(t));
-      const isIndieSearch = INDIE_TERMS.some(t => q.includes(t));
-
+      const isIndieSearch      = INDIE_TERMS.some(t => q.includes(t));
       const baseSelect = "id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )";
 
-      // Fetch brand IDs in parallel: name match + boolean flags
       const brandQueries = [
         supabase.from("brands").select("id").ilike("name", `%${q}%`),
         ...(isBlackOwnedSearch ? [supabase.from("brands").select("id").eq("black_owned", true)] : []),
@@ -939,7 +957,6 @@ function SearchTab() {
       const brandResults = await Promise.all(brandQueries);
       const brandIds = [...new Set(brandResults.flatMap(r => (r.data || []).map(b => b.id)))];
 
-      // Now query product_lines — brand IDs already correctly scoped
       const queries = [
         supabase
           .from("product_lines")
@@ -957,20 +974,13 @@ function SearchTab() {
           .limit(12),
       ];
 
-      // For black-owned / indie searches, pull ALL products from those brands directly
       if ((isBlackOwnedSearch || isIndieSearch) && brandIds.length > 0) {
         queries.push(
-          supabase
-            .from("product_lines")
-            .select(baseSelect)
-            .in("brand_id", brandIds)
-            .limit(20)
+          supabase.from("product_lines").select(baseSelect).in("brand_id", brandIds).limit(20)
         );
       }
 
       const results_raw = await Promise.all(queries);
-
-      // Merge and deduplicate
       const seen = new Set();
       const results = [];
       for (const { data } of results_raw) {
@@ -979,180 +989,263 @@ function SearchTab() {
           seen.add(pl.id);
           if (pl.products?.length > 0) {
             results.push({
-              id: pl.products[0].id,
-              name: pl.name,
-              brand: pl.brands?.name || "",
+              id:       pl.products[0].id,
+              name:     pl.name,
+              brand:    pl.brands?.name || "",
               category: pl.category,
-              price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
-              emoji: categoryEmoji(pl.category),
-              color: categoryColor(pl.category),
+              // price intentionally omitted — lives on detail page only
+              emoji:    categoryEmoji(pl.category),
+              color:    categoryColor(pl.category),
             });
           }
           if (results.length >= 20) break;
         }
       }
-
       setProductResults(results);
       setSearching(false);
     }, 300);
     return () => clearTimeout(timer);
   }, [q]);
 
-  // Category browse — triggered by topic tag taps
+  // ── Category browse (preserved from SearchTab) ───────────────────────────
   useEffect(() => {
     if (!activeCategory) { setCategoryResults([]); return; }
     supabase
       .from("product_lines")
-      .select(`id, name, category, brands ( name ), products ( id, name, price_usd )`)
+      .select("id, name, category, brands ( name ), products ( id, name, price_usd )")
       .eq("category", activeCategory)
       .limit(20)
       .then(({ data }) => {
         const results = (data || [])
           .filter(pl => pl.products?.length > 0)
           .map(pl => ({
-            id: pl.products[0].id,
-            name: pl.name,
-            brand: pl.brands?.name || "",
+            id:       pl.products[0].id,
+            name:     pl.name,
+            brand:    pl.brands?.name || "",
             category: pl.category,
-            price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
-            emoji: categoryEmoji(pl.category),
-            color: categoryColor(pl.category),
+            emoji:    categoryEmoji(pl.category),
+            color:    categoryColor(pl.category),
           }));
         setCategoryResults(results);
       });
   }, [activeCategory]);
 
-  const handleTopicTap = (cat) => {
-    setQuery("");
-    setActiveCategory(cat.id);
-    setProductResults([]);
-  };
+  const handleTopicTap = (cat) => { setQuery(""); setActiveCategory(cat.id); setProductResults([]); };
+  const clearCategory  = () => { setActiveCategory(null); setCategoryResults([]); };
 
-  const clearCategory = () => {
-    setActiveCategory(null);
-    setCategoryResults([]);
-  };
-
-  const userResults = q.length > 0 ? MOCK_USERS.filter(u => u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q) || u.bio.toLowerCase().includes(q)) : [];
+  // ── Derived search results ───────────────────────────────────────────────
+  const userResults  = q.length > 0 ? MOCK_USERS.filter(u =>
+    u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q) || u.bio.toLowerCase().includes(q)
+  ) : [];
   const topicResults = q.length > 0 ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : [];
-  const hasResults = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
-  const showPeople = activeFilter === "all" || activeFilter === "people";
+  const hasResults   = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
+  const showPeople   = activeFilter === "all" || activeFilter === "people";
   const showProducts = activeFilter === "all" || activeFilter === "products";
-  const showTopics = activeFilter === "all" || activeFilter === "topics";
+  const showTopics   = activeFilter === "all" || activeFilter === "topics";
+
+  // ── Add handler (optimistic) ─────────────────────────────────────────────
+  const handleAdd = (product) => {
+    setAddedIds(prev => new Set([...prev, product.id]));
+    onAddProduct?.(product);
+  };
 
   if (selectedUser) return <UserProfileView user={selectedUser} onBack={() => setSelectedUser(null)} />;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <div style={{ padding: "20px 16px 0", background: "#F7F5F2", flexShrink: 0 }}>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>Search</div>
-        <div style={{ position: "relative", marginBottom: 12 }}>
-          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 17, pointerEvents: "none" }}>🔍</span>
-          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="People, products, topics…" style={{ width: "100%", padding: "13px 40px 13px 44px", background: "#FFF", border: "1.5px solid #EDE9E3", borderRadius: 14, fontSize: 15, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#C8B8A2"} onBlur={e => e.target.style.borderColor = "#EDE9E3"} />
-          {query.length > 0 && <button onClick={() => setQuery("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "#E5E0D8", border: "none", borderRadius: "50%", width: 22, height: 22, fontSize: 12, color: "#888", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>}
+        <div style={{
+          fontFamily: "'Cormorant Garamond', serif",
+          fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14,
+        }}>
+          Discover
         </div>
+
+        {/* Search bar */}
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="7" cy="7" r="4.5" stroke="#C8B8A2" strokeWidth="1.5"/>
+              <path d="M11 11L14 14" stroke="#C8B8A2" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </span>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Products, people, categories…"
+            style={{
+              width: "100%", padding: "13px 40px 13px 40px",
+              background: "#FFF", border: "1.5px solid #EDE9E3",
+              borderRadius: 14, fontSize: 15, color: "#1A1A1A",
+              fontFamily: "'Jost', sans-serif",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+              transition: "border-color 0.2s",
+            }}
+            onFocus={e => e.target.style.borderColor = "#C8B8A2"}
+            onBlur={e => e.target.style.borderColor = "#EDE9E3"}
+          />
+          {query.length > 0 && (
+            <button
+              onClick={() => { setQuery(""); setActiveCategory(null); setProductResults([]); }}
+              style={{
+                position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                background: "#E5E0D8", border: "none", borderRadius: "50%",
+                width: 22, height: 22, fontSize: 12, color: "#888",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >✕</button>
+          )}
+        </div>
+
+        {/* Filter chips — only when typing */}
         {query.length > 0 && (
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 14 }}>
-            {[{ id: "all", label: "All" }, { id: "people", label: "👤 People" }, { id: "products", label: "✦ Products" }, { id: "topics", label: "◎ Topics" }].map(f => (
-              <button key={f.id} onClick={() => setActiveFilter(f.id)} style={{ background: activeFilter === f.id ? "#1A1A1A" : "transparent", border: `1.5px solid ${activeFilter === f.id ? "#1A1A1A" : "#DDD"}`, borderRadius: 20, padding: "5px 14px", fontSize: 12, fontWeight: 500, color: activeFilter === f.id ? "#FFF" : "#888", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>{f.label}</button>
+            {[
+              { id: "all",      label: "All" },
+              { id: "products", label: "Products" },
+              { id: "people",   label: "People" },
+              { id: "topics",   label: "Categories" },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setActiveFilter(f.id)}
+                style={{
+                  background:   activeFilter === f.id ? "#1A1A1A" : "transparent",
+                  border:       `1.5px solid ${activeFilter === f.id ? "#1A1A1A" : "#DDD"}`,
+                  borderRadius: 20, padding: "5px 14px",
+                  fontSize: 12, fontWeight: 500,
+                  color: activeFilter === f.id ? "#FFF" : "#888",
+                  whiteSpace: "nowrap", flexShrink: 0,
+                  transition: "all 0.2s", fontFamily: "'Jost', sans-serif",
+                }}
+              >{f.label}</button>
             ))}
           </div>
         )}
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 100px" }}>
 
-        {/* ── EMPTY STATE: category grid, no suggested cabinets ── */}
+      {/* ── Scrollable body ─────────────────────────────────────────────── */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 120px" }}>
+
+        {/* ═══ EMPTY STATE — before typing ═══════════════════════════════ */}
         {query.length === 0 && (
           <div>
-            <div style={{ paddingTop: 20 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 14 }}>BROWSE BY CATEGORY</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
+
+            {/* Phase 0/1 — Trending */}
+            <TrendingSection addedIds={addedIds} onAdd={handleAdd} />
+
+            {/* Category browse */}
+            <div style={{ marginTop: 24 }}>
+              <SectionLabel>Browse by category</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 8 }}>
                 {CATEGORIES.map((cat, i) => (
-                  <button key={cat.id} className="fade-up" onClick={() => handleTopicTap(cat)} style={{
-                    background: activeCategory === cat.id ? cat.color + "55" : "#FFF",
-                    border: `1.5px solid ${activeCategory === cat.id ? cat.color + "CC" : "#EDE9E3"}`,
-                    borderRadius: 16, padding: "14px 8px", display: "flex", flexDirection: "column",
-                    alignItems: "center", gap: 8, cursor: "pointer", transition: "all 0.18s",
-                    animationDelay: `${i * 0.04}s`, opacity: 0,
-                  }}>
-                    <div style={{ width: 38, height: 38, background: cat.color + "33", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{cat.icon}</div>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: "#555", textAlign: "center" }}>{cat.label}</span>
+                  <button
+                    key={cat.id}
+                    className="fade-up"
+                    onClick={() => handleTopicTap(cat)}
+                    style={{
+                      background:   activeCategory === cat.id ? cat.color + "55" : "#FFF",
+                      border:       `1.5px solid ${activeCategory === cat.id ? cat.color + "CC" : "#EDE9E3"}`,
+                      borderRadius: 16, padding: "14px 8px",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                      cursor: "pointer", transition: "all 0.18s",
+                      animationDelay: `${i * 0.04}s`, opacity: 0,
+                    }}
+                  >
+                    <div style={{ width: 36, height: 36, background: cat.color + "33", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{cat.icon}</div>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: "#555", textAlign: "center", fontFamily: "'Jost', sans-serif" }}>{cat.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Category product list — loads immediately on tap, no extra step */}
+            {/* Category product results */}
             {activeCategory && (
-              <div>
+              <div style={{ marginTop: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em" }}>
-                    {CATEGORIES.find(c => c.id === activeCategory)?.label.toUpperCase()}
-                  </div>
+                  <SectionLabel>{CATEGORIES.find(c => c.id === activeCategory)?.label}</SectionLabel>
                   <button onClick={clearCategory} style={{ background: "none", border: "none", color: "#C8B8A2", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em" }}>CLEAR ✕</button>
                 </div>
                 {categoryResults.length === 0 && (
-                  <div style={{ padding: "4px 0 8px" }}>
-                    {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 74, borderRadius: 14, marginBottom: 8 }} />)}
-                  </div>
+                  <>
+                    {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 68, borderRadius: 14, marginBottom: 8 }} />)}
+                  </>
                 )}
                 {categoryResults.map((product, i) => (
-                  <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px 14px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.04}s`, opacity: 0 }}>
-                    <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, boxShadow: `0 3px 10px ${product.color}44` }}>{product.emoji}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A", marginBottom: 2 }}>{product.name}</div>
-                      <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{product.brand}{product.price ? ` · ${product.price}` : ""}</div>
-                    </div>
-                    <span style={{ background: "#F5F0EB", color: "#888", fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0, textTransform: "capitalize" }}>{product.category}</span>
-                  </div>
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    index={i}
+                    owned={addedIds.has(product.id)}
+                    onAdd={() => handleAdd(product)}
+                    friendAvatars={friendAvatarsFor(product.id)}
+                    repurchaseRate={repurchaseRateFor(product.id)}
+                  />
                 ))}
               </div>
             )}
           </div>
         )}
 
-        {/* ── ACTIVE SEARCH: products first, topics second, people last ── */}
+        {/* ═══ ACTIVE SEARCH — while typing ══════════════════════════════ */}
         {query.length > 0 && (
           !hasResults && !searching ? (
             <div style={{ textAlign: "center", padding: "56px 0", color: "#CCC" }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>✦</div>
-              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, marginBottom: 6 }}>No results for "{query}"</div>
-              <div style={{ fontSize: 13, color: "#CCC" }}>Try a product name, brand, skin concern, or @handle</div>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>✦</div>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: "#BBB", marginBottom: 6 }}>
+                No results for "{query}"
+              </div>
+              <div style={{ fontSize: 13, color: "#CCC" }}>
+                Try a product name, brand, skin concern, or @handle
+              </div>
             </div>
           ) : (
             <div>
-              {/* PRODUCTS — always first */}
+
+              {/* Products — always first */}
               {showProducts && (searching || productResults.length > 0) && (
                 <div style={{ paddingTop: 20 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PRODUCTS</div>
+                  <SectionLabel>Products</SectionLabel>
                   {searching && productResults.length === 0 && (
-                    <div style={{ padding: "4px 0 8px" }}>
-                      {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 74, borderRadius: 14, marginBottom: 8 }} />)}
-                    </div>
+                    <>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 68, borderRadius: 14, marginBottom: 8 }} />)}</>
                   )}
                   {productResults.map((product, i) => (
-                    <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "12px 14px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.04}s`, opacity: 0 }}>
-                      <div style={{ width: 44, height: 62, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, boxShadow: `0 3px 10px ${product.color}44` }}>{product.emoji}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A", marginBottom: 2 }}>{product.name}</div>
-                        <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{product.brand}{product.price ? ` · ${product.price}` : ""}</div>
-                      </div>
-                      <span style={{ background: "#F5F0EB", color: "#888", fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace", flexShrink: 0, textTransform: "capitalize" }}>{product.category}</span>
-                    </div>
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      index={i}
+                      owned={addedIds.has(product.id)}
+                      onAdd={() => handleAdd(product)}
+                      friendAvatars={friendAvatarsFor(product.id)}
+                      repurchaseRate={repurchaseRateFor(product.id)}
+                    />
                   ))}
                 </div>
               )}
 
-              {/* TOPICS — second */}
+              {/* Topics / Categories — second */}
               {showTopics && topicResults.length > 0 && (
                 <div style={{ paddingTop: 20 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>TOPICS</div>
+                  <SectionLabel>Categories</SectionLabel>
                   {topicResults.map((cat, i) => (
-                    <div key={cat.id} className="fade-up" onClick={() => handleTopicTap(cat)} style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 14, padding: "14px 16px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: "50%", background: cat.color + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{cat.icon}</div>
+                    <div
+                      key={cat.id}
+                      className="fade-up"
+                      onClick={() => handleTopicTap(cat)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 14,
+                        background: "#FFF", borderRadius: 14, padding: "14px 16px",
+                        marginBottom: 8, border: "1.5px solid #EDE9E3",
+                        cursor: "pointer", animationDelay: `${i * 0.05}s`, opacity: 0,
+                      }}
+                    >
+                      <div style={{ width: 42, height: 42, borderRadius: "50%", background: cat.color + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 }}>{cat.icon}</div>
                       <div>
-                        <div style={{ fontSize: 15, fontWeight: 500, color: "#1A1A1A" }}>{cat.label}</div>
-                        <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>browse {cat.label.toLowerCase()} products →</div>
+                        <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{cat.label}</div>
+                        <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>browse {cat.label.toLowerCase()} →</div>
                       </div>
                       <span style={{ marginLeft: "auto", fontSize: 18, color: "#DDD" }}>›</span>
                     </div>
@@ -1160,19 +1253,262 @@ function SearchTab() {
                 </div>
               )}
 
-              {/* PEOPLE — last */}
+              {/* People — last */}
               {showPeople && userResults.length > 0 && (
                 <div style={{ paddingTop: 20 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>PEOPLE</div>
-                  {userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />)}
+                  <SectionLabel>People</SectionLabel>
+                  {userResults.map((user, i) => (
+                    <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />
+                  ))}
                 </div>
               )}
+
             </div>
           )
         )}
       </div>
     </div>
   );
+}
+
+// ─── TRENDING SECTION ─────────────────────────────────────────────────────────
+// Phase 0: shows repurchase rate as signal
+// Phase 1/2: would show friend activity above (currently wired with mock signals)
+
+function TrendingSection({ addedIds, onAdd }) {
+  const trending = MOCK_PRODUCTS.slice(0, 6);
+
+  return (
+    <div style={{ paddingTop: 20 }}>
+      <SectionLabel>Trending in cabinet.</SectionLabel>
+      {trending.map((product, i) => (
+        <TrendingRow
+          key={product.id}
+          product={product}
+          rank={i + 1}
+          index={i}
+          owned={addedIds.has(product.id)}
+          onAdd={() => onAdd(product)}
+          friendAvatars={friendAvatarsFor(product.id)}
+          repurchaseRate={repurchaseRateFor(product.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TrendingRow({ product, rank, index, owned, onAdd, friendAvatars, repurchaseRate }) {
+  return (
+    <div
+      className="fade-up"
+      style={{
+        display: "flex", alignItems: "center", gap: 12,
+        background: "#FFF", borderRadius: 14, padding: "12px 14px",
+        marginBottom: 8, border: "1.5px solid #EDE9E3",
+        cursor: "pointer", animationDelay: `${index * 0.05}s`, opacity: 0,
+      }}
+    >
+      {/* Rank */}
+      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: "#DDD", width: 22, textAlign: "center", flexShrink: 0 }}>
+        {String(rank).padStart(2, "0")}
+      </span>
+
+      {/* Product image */}
+      <div style={{
+        width: 44, height: 60, flexShrink: 0,
+        background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`,
+        borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 20, boxShadow: `0 3px 10px ${product.color}44`,
+      }}>
+        {product.emoji}
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "#1A1A1A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 2 }}>
+          {product.name}
+        </div>
+        <div style={{ fontSize: 10, color: "#BBB", fontFamily: "'DM Mono', monospace", marginBottom: 4 }}>
+          {product.brand}
+        </div>
+        {/* ONE signal — friends beat repurchase, repurchase beats nothing */}
+        <SignalRow friendAvatars={friendAvatars} repurchaseRate={repurchaseRate} />
+      </div>
+
+      {/* Add button */}
+      <AddButton owned={owned} onAdd={onAdd} />
+    </div>
+  );
+}
+
+// ─── PRODUCT CARD (search results + category browse) ─────────────────────────
+
+function ProductCard({ product, index, owned, onAdd, friendAvatars, repurchaseRate }) {
+  return (
+    <div
+      className="fade-up"
+      style={{
+        display: "flex", alignItems: "center", gap: 12,
+        background: "#FFF", borderRadius: 14, padding: "12px 14px",
+        marginBottom: 8, border: "1.5px solid #EDE9E3",
+        cursor: "pointer", animationDelay: `${index * 0.04}s`, opacity: 0,
+        transition: "background 0.15s",
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = "#FBF9F6"}
+      onMouseLeave={e => e.currentTarget.style.background = "#FFF"}
+    >
+      {/* Product image */}
+      <div style={{
+        width: 44, height: 60, flexShrink: 0,
+        background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`,
+        borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 20, boxShadow: `0 3px 10px ${product.color}44`,
+      }}>
+        {product.emoji}
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "#CCC", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>
+          {product.brand}
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "#1A1A1A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 4 }}>
+          {product.name}
+        </div>
+        {/* ONE signal */}
+        <SignalRow friendAvatars={friendAvatars} repurchaseRate={repurchaseRate} />
+      </div>
+
+      {/* Add button */}
+      <AddButton owned={owned} onAdd={onAdd} />
+    </div>
+  );
+}
+
+// ─── SIGNAL ROW ──────────────────────────────────────────────────────────────
+// The one-signal rule implemented:
+// 1. Friend avatars if friends have it
+// 2. Repurchase % if no friends but data exists
+// 3. Nothing if no data
+
+function SignalRow({ friendAvatars = [], repurchaseRate = null }) {
+  if (friendAvatars.length > 0) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", height: 18 }}>
+        <div style={{ display: "flex" }}>
+          {friendAvatars.slice(0, 4).map((av, i) => (
+            <div
+              key={i}
+              style={{
+                width: 16, height: 16, borderRadius: "50%",
+                background: av.color, border: "1.5px solid #FFF",
+                marginLeft: i === 0 ? 0 : -4,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 6, fontWeight: 700, color: "#FFF",
+                fontFamily: "'DM Mono', monospace",
+              }}
+            >
+              {av.initials}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (repurchaseRate !== null) {
+    return (
+      <div style={{ height: 18, display: "flex", alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: "#7AAF8A", fontFamily: "'DM Mono', monospace", letterSpacing: "0.02em" }}>
+          ↻ {repurchaseRate}%
+        </span>
+      </div>
+    );
+  }
+
+  // No signal — preserve height so cards align
+  return <div style={{ height: 18 }} />;
+}
+
+// ─── ADD BUTTON ───────────────────────────────────────────────────────────────
+
+function AddButton({ owned, onAdd }) {
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); if (!owned) onAdd(); }}
+      style={{
+        width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+        border: owned ? "1.5px solid rgba(122,175,138,0.3)" : "1.5px solid #E5E0D8",
+        background: owned ? "rgba(122,175,138,0.1)" : "#FFF",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: owned ? "default" : "pointer",
+        transition: "all 0.2s ease",
+        color: owned ? "#7AAF8A" : "#999",
+      }}
+      aria-label={owned ? "In your cabinet" : "Add to cabinet"}
+    >
+      {owned ? (
+        <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+          <path d="M1 5L4.5 8.5L11 1" stroke="#7AAF8A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 1.5V10.5M1.5 6H10.5" stroke="#BBB" strokeWidth="1.6" strokeLinecap="round"/>
+        </svg>
+      )}
+    </button>
+  );
+}
+
+// ─── SECTION LABEL ───────────────────────────────────────────────────────────
+
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontFamily: "'DM Mono', monospace",
+      fontSize: 10, color: "#BBB",
+      letterSpacing: "0.1em",
+      textTransform: "uppercase",
+      marginBottom: 12,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+// ─── SIGNAL DATA HELPERS ──────────────────────────────────────────────────────
+// These return mock signal data for now.
+// When you wire up real social data from Supabase, swap these out.
+// Shape expected:
+//   friendAvatarsFor(productId) → [{ initials: "JL", color: "#D4A5A5" }, …]
+//   repurchaseRateFor(productId) → number (0-100) or null
+
+const MOCK_FRIEND_SIGNALS = {
+  // product.id → array of friend avatars who have it
+  1: [{ initials: "SR", color: "#D4A5A5" }, { initials: "MC", color: "#C8B8A2" }],
+  3: [{ initials: "JW", color: "#A5C8B8" }],
+  5: [{ initials: "AJ", color: "#A5B8C8" }],
+  6: [{ initials: "PP", color: "#B8A5C8" }],
+  7: [{ initials: "MC", color: "#C8B8A2" }, { initials: "SR", color: "#D4A5A5" }],
+};
+
+const MOCK_REPURCHASE_RATES = {
+  // product.id → repurchase % (shown only when no friends)
+  2: 87,
+  4: 91,
+  8: 79,
+  9: 82,
+  10: 84,
+  11: 76,
+  12: 68,
+};
+
+function friendAvatarsFor(productId) {
+  return MOCK_FRIEND_SIGNALS[productId] || [];
+}
+
+function repurchaseRateFor(productId) {
+  return MOCK_REPURCHASE_RATES[productId] ?? null;
 }
 
 function UserRow({ user, index = 0, onTap }) {
@@ -1197,53 +1533,223 @@ function UserRow({ user, index = 0, onTap }) {
   );
 }
 
-// ─── EXPLORE TAB ─────────────────────────────────────────────────────────────
+// ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
+// 4 tabs: Feed · Discover · [+] · Cabinet
+// Fixed position with iOS safe area insets.
+// Drop-in replacement for the existing BottomNav component in App.jsx.
 
-function ExploreTab() {
+function BottomNav({ active, onChange, onAddPress }) {
+  const LEFT_TABS  = [{ id: "feed",    label: "Feed",     icon: FeedIcon    }];
+  const RIGHT_TABS = [{ id: "cabinet", label: "Cabinet",  icon: CabinetIcon }];
+  const DISCOVER   =  { id: "discover", label: "Discover", icon: DiscoverIcon };
+
   return (
-    <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100, padding: "20px 16px 100px" }}>
-      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 6 }}>Explore</div>
-      <div style={{ fontSize: 13, color: "#AAA", marginBottom: 20 }}>Discover what's trending in cabinets</div>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>TRENDING PRODUCTS</div>
-      {MOCK_PRODUCTS.slice(0, 6).map((product, i) => (
-        <div key={product.id} className="fade-up" style={{ display: "flex", alignItems: "center", gap: 14, background: "#FFF", borderRadius: 16, padding: "14px", marginBottom: 10, border: "1.5px solid #EDE9E3", animationDelay: `${i * 0.06}s`, opacity: 0 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, color: "#DDD", width: 28, textAlign: "center", flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</div>
-          <div style={{ width: 48, height: 66, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{product.emoji}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: "#1A1A1A" }}>{product.name}</div>
-            <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{product.brand} · {product.price}</div>
-          </div>
-          <button style={{ background: "#F0EDE8", border: "none", borderRadius: 20, padding: "6px 14px", fontSize: 12, color: "#666", fontWeight: 500 }}>+ Add</button>
+    <>
+      {/* iOS safe-area style injection */}
+      <style>{`
+        .bottom-nav {
+          position: fixed;
+          bottom: 0;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 100%;
+          max-width: 480px;
+          background: rgba(253, 250, 247, 0.97);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border-top: 1px solid #EDE9E3;
+          display: flex;
+          align-items: center;
+          padding: 10px 0 0;
+          padding-bottom: calc(16px + env(safe-area-inset-bottom));
+          z-index: 50;
+        }
+        .nav-tab-btn {
+          flex: 1;
+          background: none;
+          border: none;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 0;
+          cursor: pointer;
+          position: relative;
+          -webkit-tap-highlight-color: transparent;
+          transition: opacity 0.15s ease;
+        }
+        .nav-tab-btn:active { opacity: 0.65; }
+        .nav-tab-indicator {
+          position: absolute;
+          top: -10px;
+          width: 20px;
+          height: 2px;
+          background: #1A1A1A;
+          border-radius: 0 0 2px 2px;
+          transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .nav-tab-label {
+          font-family: 'DM Mono', monospace;
+          font-size: 9.5px;
+          font-weight: 500;
+          letter-spacing: 0.05em;
+          transition: color 0.2s ease;
+        }
+        .add-btn-wrap {
+          flex: 1;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        }
+        .add-btn {
+          width: 50px;
+          height: 50px;
+          background: #1A1A1A;
+          border: none;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 18px rgba(26,26,26,0.20);
+          cursor: pointer;
+          margin-bottom: 2px;
+          -webkit-tap-highlight-color: transparent;
+          transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s ease;
+        }
+        .add-btn:active {
+          transform: scale(0.91);
+          box-shadow: 0 2px 10px rgba(26,26,26,0.15);
+        }
+      `}</style>
+
+      <nav className="bottom-nav">
+        {/* Left: Feed */}
+        {LEFT_TABS.map(tab => (
+          <NavTab
+            key={tab.id}
+            tab={tab}
+            active={active === tab.id}
+            onChange={onChange}
+          />
+        ))}
+
+        {/* Left-centre: Discover */}
+        <NavTab
+          tab={DISCOVER}
+          active={active === DISCOVER.id}
+          onChange={onChange}
+        />
+
+        {/* Centre: Add button */}
+        <div className="add-btn-wrap">
+          <button
+            className="add-btn"
+            onClick={onAddPress}
+            aria-label="Add product"
+          >
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <path d="M11 4V18M4 11H18" stroke="#FFF" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
         </div>
-      ))}
-    </div>
+
+        {/* Right: Cabinet */}
+        {RIGHT_TABS.map(tab => (
+          <NavTab
+            key={tab.id}
+            tab={tab}
+            active={active === tab.id}
+            onChange={onChange}
+          />
+        ))}
+      </nav>
+    </>
   );
 }
 
-// ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
+// ─── NAV TAB ─────────────────────────────────────────────────────────────────
 
-function BottomNav({ active, onChange, onAddPress }) {
-  const LEFT_TABS  = [{ id: "feed", icon: "⚡", label: "Feed" }, { id: "search", icon: "🔍", label: "Search" }];
-  const RIGHT_TABS = [{ id: "explore", icon: "✦", label: "Explore" }, { id: "cabinet", icon: "🪞", label: "Cabinet" }];
-
-  const NavTab = ({ tab }) => (
-    <button className={`tab-btn ${active === tab.id ? "active" : ""}`} onClick={() => onChange(tab.id)} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "4px 0", position: "relative" }}>
-      {active === tab.id && <div style={{ position: "absolute", top: -10, width: 24, height: 2, background: "#1A1A1A", borderRadius: "0 0 2px 2px" }} />}
-      <span style={{ fontSize: 19 }}>{tab.icon}</span>
-      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: "0.05em", color: active === tab.id ? "#1A1A1A" : "#CCC", transition: "color 0.2s" }}>{tab.label}</span>
+function NavTab({ tab, active, onChange }) {
+  const Icon = tab.icon;
+  return (
+    <button
+      className="nav-tab-btn"
+      onClick={() => onChange(tab.id)}
+      aria-label={tab.label}
+      aria-current={active ? "page" : undefined}
+    >
+      {active && <div className="nav-tab-indicator" />}
+      <Icon active={active} />
+      <span
+        className="nav-tab-label"
+        style={{ color: active ? "#1A1A1A" : "#C8C0B8" }}
+      >
+        {tab.label}
+      </span>
     </button>
   );
+}
 
+// ─── ICONS ───────────────────────────────────────────────────────────────────
+// SVG icons — clean, consistent weight, matches cabinet. aesthetic
+
+function FeedIcon({ active }) {
   return (
-    <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "rgba(253,250,247,0.96)", backdropFilter: "blur(16px)", borderTop: "1px solid #EDE9E3", display: "flex", alignItems: "center", padding: "10px 0 24px", zIndex: 50 }}>
-      {LEFT_TABS.map(tab => <NavTab key={tab.id} tab={tab} />)}
-      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
-        <button onClick={onAddPress} style={{ width: 52, height: 52, background: "#1A1A1A", border: "none", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(26,26,26,0.22)", cursor: "pointer", marginBottom: 2, transition: "transform 0.15s ease, box-shadow 0.15s ease" }} onMouseDown={e => e.currentTarget.style.transform = "scale(0.92)"} onMouseUp={e => e.currentTarget.style.transform = "scale(1)"} onTouchStart={e => e.currentTarget.style.transform = "scale(0.92)"} onTouchEnd={e => e.currentTarget.style.transform = "scale(1)"}>
-          <span style={{ fontSize: 26, color: "#FFF", lineHeight: 1, marginTop: -1 }}>+</span>
-        </button>
-      </div>
-      {RIGHT_TABS.map(tab => <NavTab key={tab.id} tab={tab} />)}
-    </div>
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <path
+        d="M3 5h14M3 10h14M3 15h8"
+        stroke={active ? "#1A1A1A" : "#C8C0B8"}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function DiscoverIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <circle
+        cx="9"
+        cy="9"
+        r="5.5"
+        stroke={active ? "#1A1A1A" : "#C8C0B8"}
+        strokeWidth="1.6"
+      />
+      <path
+        d="M14 14L17 17"
+        stroke={active ? "#1A1A1A" : "#C8C0B8"}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CabinetIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <rect
+        x="3"
+        y="2.5"
+        width="14"
+        height="15"
+        rx="2"
+        stroke={active ? "#1A1A1A" : "#C8C0B8"}
+        strokeWidth="1.6"
+      />
+      <path
+        d="M3 7h14"
+        stroke={active ? "#1A1A1A" : "#C8C0B8"}
+        strokeWidth="1.6"
+      />
+      <path
+        d="M3 12h14"
+        stroke={active ? "#1A1A1A" : "#C8C0B8"}
+        strokeWidth="1.6"
+      />
+      <circle cx="10" cy="9.5" r="1" fill={active ? "#1A1A1A" : "#C8C0B8"} />
+    </svg>
   );
 }
 
@@ -1737,11 +2243,12 @@ function AuthGate({ onAuthenticated }) {
   return null;
 }
 
+
 // ─── ROOT APP ────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [authedUser, setAuthedUser] = useState(null);
-  const [activeTab, setActiveTab] = useState("feed");
+  const [activeTab, setActiveTab] = useState("feed"); // feed | discover | cabinet
   const [cabinetTheme, setCabinetTheme] = useState(CABINET_THEMES[0]);
   const [myProducts, setMyProducts] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1882,10 +2389,9 @@ export default function App() {
   if (!authedUser) return shell(<AuthGate onAuthenticated={handleAuthenticated} />);
 
   return shell(<>
-    {activeTab === "feed"    && <FeedTab />}
-    {activeTab === "search"  && <SearchTab />}
-    {activeTab === "explore" && <ExploreTab />}
-    {activeTab === "cabinet" && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onSignOut={handleSignOut} loading={loadingCabinet} />}
+    {activeTab === "feed"     && <FeedTab />}
+    {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} />}
+    {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onSignOut={handleSignOut} loading={loadingCabinet} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
