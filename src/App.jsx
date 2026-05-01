@@ -293,34 +293,88 @@ function MedicineCabinet({ products, theme, onProductClick, onAddClick }) {
 
 // ─── PRODUCT DETAIL MODAL ────────────────────────────────────────────────────
 
-function ProductModal({ product, onClose }) {
+function ProductModal({ product, onClose, onRemove, isOwn }) {
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
   if (!product) return null;
+
+  const handleRemove = () => {
+    setRemoving(true);
+    setTimeout(() => {
+      onRemove(product);
+      onClose();
+    }, 300);
+  };
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", padding: "28px 24px 48px", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)" }}>
         <div style={{ width: 40, height: 4, background: "#E0DAD2", borderRadius: 2, margin: "0 auto 24px" }} />
-        <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 24 }}>
-          <div style={{ width: 90, height: 126, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, boxShadow: `0 8px 24px ${product.color}55`, flexShrink: 0, position: "relative", overflow: "hidden" }}>
-            <div style={{ position: "absolute", top: 0, left: "15%", width: "30%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.5),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
-            {product.emoji}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{product.name}</div>
-            <div style={{ fontSize: 14, color: "#888", fontWeight: 300, marginBottom: 12 }}>{product.brand}</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ background: retailerBg(product.retailer), color: retailerColor(product.retailer), fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{product.retailer}</span>
-              <span style={{ background: "#F5F0EB", color: "#888", fontSize: 11, padding: "4px 10px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{product.price}</span>
+
+        {!confirmRemove ? (
+          <>
+            <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 24 }}>
+              <div style={{ width: 90, height: 126, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, boxShadow: `0 8px 24px ${product.color}55`, flexShrink: 0, position: "relative", overflow: "hidden" }}>
+                <div style={{ position: "absolute", top: 0, left: "15%", width: "30%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.5),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
+                {product.emoji}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{product.name}</div>
+                <div style={{ fontSize: 14, color: "#888", fontWeight: 300, marginBottom: 12 }}>{product.brand}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {product.retailer && <span style={{ background: retailerBg(product.retailer), color: retailerColor(product.retailer), fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{product.retailer}</span>}
+                  {product.price && <span style={{ background: "#F5F0EB", color: "#888", fontSize: 11, padding: "4px 10px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{product.price}</span>}
+                </div>
+              </div>
+            </div>
+
+            {product.status && (
+              <div style={{ background: "#F5F0EB", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+                <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace", marginBottom: 4, letterSpacing: "0.06em" }}>STATUS</div>
+                <div style={{ fontSize: 15, color: "#555", fontWeight: 400, textTransform: "capitalize" }}>{(product.status || "").replace(/_/g, " ")}</div>
+              </div>
+            )}
+
+            <div style={{ background: "#F5F0EB", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+              <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace", marginBottom: 4, letterSpacing: "0.06em" }}>CATEGORY</div>
+              <div style={{ fontSize: 15, color: "#555", fontWeight: 400 }}>{CATEGORIES.find(c => c.id === product.category)?.label || product.category}</div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: isOwn ? 12 : 0 }}>
+              <button style={{ background: "#1A1A1A", color: "#FFF", border: "none", borderRadius: 12, padding: "14px", fontSize: 14, fontWeight: 500 }}>Shop Now</button>
+              <button onClick={onClose} style={{ background: "#F0EDE8", color: "#555", border: "none", borderRadius: 12, padding: "14px", fontSize: 14, fontWeight: 400 }}>Close</button>
+            </div>
+
+            {isOwn && (
+              <button onClick={() => setConfirmRemove(true)} style={{ width: "100%", padding: "12px", background: "none", border: "none", color: "#D47070", fontSize: 13, cursor: "pointer", fontFamily: "'Jost', sans-serif" }}>
+                Remove from cabinet
+              </button>
+            )}
+          </>
+        ) : (
+          <div style={{ animation: "fadeUp 0.25s ease" }}>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#FFF0EB", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 7V20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20V7" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M4 7H20" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M9 7V4C9 3.4 9.4 3 10 3H14C14.6 3 15 3.4 15 4V7" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M10 11V17" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M14 11V17" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A", marginBottom: 6 }}>Remove this product?</div>
+              <div style={{ fontSize: 13, color: "#AAA", lineHeight: 1.6 }}>{product.name} will be removed from your cabinet.</div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setConfirmRemove(false)} style={{ flex: 1, padding: "14px", background: "#F0EDE8", color: "#555", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, fontFamily: "'Jost', sans-serif" }}>Keep it</button>
+              <button onClick={handleRemove} disabled={removing} style={{ flex: 1, padding: "14px", background: removing ? "#E0A0A0" : "#D47070", color: "#FFF", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, fontFamily: "'Jost', sans-serif", transition: "background 0.2s" }}>
+                {removing ? "Removing…" : "Remove"}
+              </button>
             </div>
           </div>
-        </div>
-        <div style={{ background: "#F5F0EB", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
-          <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>CATEGORY</div>
-          <div style={{ fontSize: 15, color: "#555", fontWeight: 400 }}>{CATEGORIES.find(c => c.id === product.category)?.label}</div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <button style={{ background: "#1A1A1A", color: "#FFF", border: "none", borderRadius: 12, padding: "14px", fontSize: 14, fontWeight: 500 }}>Shop Now</button>
-          <button onClick={onClose} style={{ background: "#F0EDE8", color: "#555", border: "none", borderRadius: 12, padding: "14px", fontSize: 14, fontWeight: 400 }}>Close</button>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -637,12 +691,14 @@ function FeedPostCard({ post, index }) {
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onSignOut }) {
+function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onSignOut, loading }) {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [toast, setToast] = useState(null);
+  const undoRef = useRef(null);
 
   const displayName = user?.name || "User";
   const handle = user?.handle || "@user";
@@ -653,6 +709,33 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onSign
     setSigningOut(true);
     await supabase.auth.signOut();
     onSignOut();
+  };
+
+  const handleRemove = (product) => {
+    // Optimistic remove — show toast with undo
+    onRemoveProduct(product, false); // false = don't persist yet
+    setSelectedProduct(null);
+
+    // Show undo toast
+    setToast({ product, visible: true });
+
+    // Clear any existing undo timer
+    if (undoRef.current) clearTimeout(undoRef.current);
+
+    // Auto-persist after 5 seconds
+    undoRef.current = setTimeout(() => {
+      onRemoveProduct(product, true); // true = persist to Supabase
+      setToast(null);
+    }, 5000);
+  };
+
+  const handleUndo = () => {
+    if (undoRef.current) clearTimeout(undoRef.current);
+    if (toast?.product) {
+      // Re-add the product locally (no Supabase write needed — it was never deleted)
+      onAddProduct(toast.product);
+    }
+    setToast(null);
   };
 
   return (
@@ -700,8 +783,25 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onSign
           <span style={{ fontSize: 20 }}>＋</span> Add Product to Cabinet
         </button>
       </div>
+
+      {/* Undo toast */}
+      {toast?.visible && (
+        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", maxWidth: 440, width: "calc(100% - 32px)", background: "#1A140F", borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, zIndex: 60, animation: "fadeUp 0.25s ease", boxShadow: "0 8px 24px rgba(0,0,0,0.25)" }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="7" stroke="#7EC8A0" strokeWidth="1.2"/>
+            <path d="M5 8L7 10L11 6" stroke="#7EC8A0" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span style={{ flex: 1, fontSize: 13, color: "#FDFAF7", fontFamily: "'Jost', sans-serif" }}>
+            {toast.product?.name || "Product"} removed
+          </span>
+          <button onClick={handleUndo} style={{ background: "none", border: "none", color: "#C8B8A2", fontSize: 12, fontFamily: "'DM Mono', monospace", cursor: "pointer", padding: "2px 4px", letterSpacing: "0.04em" }}>
+            Undo
+          </button>
+        </div>
+      )}
+
       {showThemePicker && <ThemePicker current={theme} onSelect={onThemeChange} onClose={() => setShowThemePicker(false)} />}
-      {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
+      {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} isOwn={true} />}
       {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={p => { onAddProduct(p); }} />}
     </div>
   );
@@ -1361,7 +1461,10 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         setLoading(false);
         return;
       }
-      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name").eq("id", data.user.id).single();
+      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name, cabinet_theme").eq("id", data.user.id).single();
+      const savedTheme = profile?.cabinet_theme
+        ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
+        : null;
       setLoading(false);
       onSuccess({
         id: data.user.id,
@@ -1369,6 +1472,7 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         name: profile?.display_name || data.user.email,
         handle: profile?.username ? "@" + profile.username : "@" + data.user.email.split("@")[0],
         cabinetName: profile?.cabinet_name || null,
+        cabinetTheme: savedTheme,
       });
     } catch (err) {
       setErrors({ password: "Something went wrong. Please try again." });
@@ -1529,6 +1633,7 @@ function OnboardingScreen({ user, onComplete }) {
       await supabase.from("profiles").update({
         onboarding_complete: true,
         cabinet_name: finalName,
+        cabinet_theme: selectedTheme,
       }).eq("id", user.id);
     }
     setLoading(false);
@@ -1593,14 +1698,18 @@ function AuthGate({ onAuthenticated }) {
     // Check for existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name").eq("id", session.user.id).single()
+        supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name, cabinet_theme").eq("id", session.user.id).single()
           .then(({ data: profile }) => {
+            const savedTheme = profile?.cabinet_theme
+              ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
+              : null;
             onAuthenticated({
               id: session.user.id,
               email: session.user.email,
               name: profile?.display_name || session.user.email,
               handle: profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
               cabinetName: profile?.cabinet_name || null,
+              cabinetTheme: savedTheme,
             });
           });
       } else {
@@ -1634,23 +1743,133 @@ export default function App() {
   const [authedUser, setAuthedUser] = useState(null);
   const [activeTab, setActiveTab] = useState("feed");
   const [cabinetTheme, setCabinetTheme] = useState(CABINET_THEMES[0]);
-  const [myProducts, setMyProducts] = useState(MOCK_PRODUCTS.slice(0, 7));
+  const [myProducts, setMyProducts] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [loadingCabinet, setLoadingCabinet] = useState(false);
+
+  // ── Load cabinet from Supabase when user authenticates ──────────────────
+  const loadCabinet = async (userId) => {
+    setLoadingCabinet(true);
+
+    // 1. Load theme from profiles
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("cabinet_theme")
+      .eq("id", userId)
+      .single();
+
+    if (profile?.cabinet_theme) {
+      const saved = CABINET_THEMES.find(t => t.id === profile.cabinet_theme);
+      if (saved) setCabinetTheme(saved);
+    }
+
+    // 2. Load products from user_products → products → product_lines → brands
+    const { data: userProducts } = await supabase
+      .from("user_products")
+      .select(`
+        id,
+        product_id,
+        status,
+        notes,
+        products (
+          id,
+          name,
+          price_usd,
+          image_url,
+          product_lines (
+            name,
+            category,
+            brands ( name )
+          )
+        )
+      `)
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+
+    if (userProducts?.length > 0) {
+      // Deduplicate by product_id (keep latest status)
+      const seen = new Set();
+      const products = [];
+      for (const up of userProducts) {
+        if (seen.has(up.product_id) || !up.products) continue;
+        seen.add(up.product_id);
+        const p = up.products;
+        const pl = p.product_lines;
+        products.push({
+          id: p.id,
+          user_product_id: up.id,
+          name: pl?.name || p.name,
+          sku: p.name,
+          brand: pl?.brands?.name || "",
+          category: pl?.category || "other",
+          price: p.price_usd ? `$${p.price_usd}` : "",
+          emoji: categoryEmoji(pl?.category),
+          color: categoryColor(pl?.category),
+          status: up.status,
+        });
+      }
+      setMyProducts(products);
+    }
+
+    setLoadingCabinet(false);
+  };
 
   const handleAuthenticated = (user) => {
     if (user.cabinetTheme) setCabinetTheme(user.cabinetTheme);
     setAuthedUser(user);
+    if (user.id) loadCabinet(user.id);
   };
 
   const handleSignOut = () => {
     setAuthedUser(null);
     setActiveTab("feed");
     setCabinetTheme(CABINET_THEMES[0]);
-    setMyProducts(MOCK_PRODUCTS.slice(0, 7));
+    setMyProducts([]);
   };
 
-  const handleAddProduct = (product) => {
+  // ── Add product: write to Supabase, then update local state ─────────────
+  const handleAddProduct = async (product) => {
+    // Optimistic local update
     setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, product]);
+
+    // Persist to Supabase
+    if (authedUser?.id && product.id) {
+      await supabase.from("user_products").insert({
+        user_id: authedUser.id,
+        product_id: product.id,
+        status: "using",
+      });
+    }
+  };
+
+  // ── Remove product: optimistic local remove, delayed Supabase soft-delete ─
+  const handleRemoveProduct = async (product, persist) => {
+    if (!persist) {
+      // Optimistic: just remove from local state
+      setMyProducts(prev => prev.filter(p => p.id !== product.id));
+      return;
+    }
+    // Persist: soft-delete in Supabase
+    if (authedUser?.id && product.id) {
+      await supabase
+        .from("user_products")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("user_id", authedUser.id)
+        .eq("product_id", product.id)
+        .is("deleted_at", null);
+    }
+  };
+
+  // ── Change theme: write to Supabase, then update local state ────────────
+  const handleThemeChange = async (theme) => {
+    setCabinetTheme(theme);
+    if (authedUser?.id) {
+      await supabase
+        .from("profiles")
+        .update({ cabinet_theme: theme.id })
+        .eq("id", authedUser.id);
+    }
   };
 
   const shell = (children) => (
@@ -1666,7 +1885,7 @@ export default function App() {
     {activeTab === "feed"    && <FeedTab />}
     {activeTab === "search"  && <SearchTab />}
     {activeTab === "explore" && <ExploreTab />}
-    {activeTab === "cabinet" && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={setCabinetTheme} onAddProduct={handleAddProduct} onSignOut={handleSignOut} />}
+    {activeTab === "cabinet" && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onSignOut={handleSignOut} loading={loadingCabinet} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
