@@ -1245,7 +1245,25 @@ function SignUpScreen({ onBack, onSuccess }) {
         }
 
         if (data.user) {
-          await supabase.from("profiles").upsert({ id: data.user.id, display_name: name, username: handle });
+          // Wait for Supabase auth trigger to create the profile row,
+          // then update it with the user's chosen name + handle.
+          // The trigger runs async, so we poll until the row exists.
+          const userId = data.user.id;
+          let attempts = 0;
+          while (attempts < 10) {
+            const { data: existing } = await supabase
+              .from("profiles")
+              .select("id")
+              .eq("id", userId)
+              .single();
+            if (existing) break;
+            await new Promise(r => setTimeout(r, 300));
+            attempts++;
+          }
+          await supabase
+            .from("profiles")
+            .update({ display_name: name, username: handle })
+            .eq("id", userId);
         }
 
         setLoading(false);
