@@ -343,11 +343,10 @@ function AddProductModal({ onClose, onAdd }) {
 
   // Real Supabase product search with debounce
   useEffect(() => {
-    if (searchQuery.length < 2) { setResults([]); return; }
+    if (searchQuery.length < 1) { setResults([]); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
 
-      // Find matching brand IDs first
       const { data: brandMatches } = await supabase
         .from("brands")
         .select("id")
@@ -357,13 +356,17 @@ function AddProductModal({ onClose, onAdd }) {
 
       let queryBuilder = supabase
         .from("product_lines")
-        .select(`id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )`)
+        .select(`id, name, category, brand_id, description, brands ( name ), products ( id, name, price_usd )`)
         .limit(12);
 
       if (brandIds.length > 0) {
-        queryBuilder = queryBuilder.or(`name.ilike.%${searchQuery}%,brand_id.in.(${brandIds.join(",")})`);
+        queryBuilder = queryBuilder.or(
+          `name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,brand_id.in.(${brandIds.join(",")})`
+        );
       } else {
-        queryBuilder = queryBuilder.ilike("name", `%${searchQuery}%`);
+        queryBuilder = queryBuilder.or(
+          `name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`
+        );
       }
 
       const { data: lineData } = await queryBuilder;
@@ -760,11 +763,11 @@ function SearchTab() {
 
   // Real Supabase product search with debounce
   useEffect(() => {
-    if (q.length < 2) { setProductResults([]); return; }
+    if (q.length < 1) { setProductResults([]); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
 
-      // First find matching brand IDs
+      // Find matching brand IDs
       const { data: brandMatches } = await supabase
         .from("brands")
         .select("id")
@@ -772,16 +775,20 @@ function SearchTab() {
 
       const brandIds = (brandMatches || []).map(b => b.id);
 
-      // Build filter: match product line name OR brand_id in matching brands
+      // Search product lines by name, description, or brand
       let queryBuilder = supabase
         .from("product_lines")
-        .select(`id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )`)
+        .select(`id, name, category, brand_id, description, brands ( name ), products ( id, name, price_usd )`)
         .limit(12);
 
       if (brandIds.length > 0) {
-        queryBuilder = queryBuilder.or(`name.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`);
+        queryBuilder = queryBuilder.or(
+          `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
+        );
       } else {
-        queryBuilder = queryBuilder.ilike("name", `%${q}%`);
+        queryBuilder = queryBuilder.or(
+          `name.ilike.%${q}%,description.ilike.%${q}%`
+        );
       }
 
       const { data: lineData } = await queryBuilder;
