@@ -637,29 +637,55 @@ function FeedPostCard({ post, index }) {
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ user, products, theme, onThemeChange, onAddProduct }) {
+function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onSignOut }) {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
-  const displayName = user?.name || "My Cabinet";
-  const handle = user?.handle || "@myhandle";
+  const displayName = user?.name || "User";
+  const handle = user?.handle || "@user";
   const cabinetName = user?.cabinetName || `${displayName.split(" ")[0]}'s Cabinet`;
   const initials = displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "ME";
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    await supabase.auth.signOut();
+    onSignOut();
+  };
 
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
       <div style={{ padding: "20px 20px 16px", background: "#FDFAF7" }}>
+        {/* Profile header row */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
           <div style={{ width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg, #D4A5A5, #A5B8C8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>{initials}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A" }}>{cabinetName}</div>
-            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{products.length} products · {handle}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#1A1A1A", marginBottom: 1 }}>{displayName}</div>
+            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{handle} · {products.length} products</div>
           </div>
-          <button onClick={() => setShowThemePicker(true)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 500, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
-            {theme.emoji} Style
-          </button>
+          <button onClick={() => setShowSettings(s => !s)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 10, width: 36, height: 36, fontSize: 16, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>⚙</button>
         </div>
+
+        {/* Settings drawer */}
+        {showSettings && (
+          <div style={{ background: "#FFF", border: "1.5px solid #EDE9E3", borderRadius: 14, padding: "14px 16px", marginBottom: 16, animation: "fadeUp 0.2s ease" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>SETTINGS</div>
+            <button onClick={() => setShowThemePicker(true)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #F0EDE8", color: "#1A1A1A", fontSize: 14, textAlign: "left" }}>
+              <span style={{ fontSize: 18 }}>{theme.emoji}</span>
+              <span style={{ flex: 1 }}>Cabinet Style</span>
+              <span style={{ fontSize: 12, color: "#AAA" }}>→</span>
+            </button>
+            <button onClick={handleSignOut} disabled={signingOut} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 0", background: "none", border: "none", color: "#E07070", fontSize: 14, textAlign: "left", cursor: signingOut ? "default" : "pointer" }}>
+              <span style={{ fontSize: 18 }}>↪</span>
+              <span>{signingOut ? "Signing out…" : "Sign Out"}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Category chips */}
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {CATEGORIES.map(cat => (
             <div key={cat.id} style={{ background: cat.color + "33", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 500, color: "#555", whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
@@ -1219,7 +1245,7 @@ function SignUpScreen({ onBack, onSuccess }) {
         }
 
         if (data.user) {
-          await supabase.from("profiles").update({ display_name: name, username: handle }).eq("id", data.user.id);
+          await supabase.from("profiles").upsert({ id: data.user.id, display_name: name, username: handle });
         }
 
         setLoading(false);
@@ -1317,9 +1343,15 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         setLoading(false);
         return;
       }
-      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url").eq("id", data.user.id).single();
+      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name").eq("id", data.user.id).single();
       setLoading(false);
-      onSuccess({ id: data.user.id, email: data.user.email, name: profile?.display_name || data.user.email, handle: profile?.username ? "@" + profile.username : "@user" });
+      onSuccess({
+        id: data.user.id,
+        email: data.user.email,
+        name: profile?.display_name || data.user.email,
+        handle: profile?.username ? "@" + profile.username : "@" + data.user.email.split("@")[0],
+        cabinetName: profile?.cabinet_name || null,
+      });
     } catch (err) {
       setErrors({ password: "Something went wrong. Please try again." });
       setLoading(false);
@@ -1549,7 +1581,7 @@ function AuthGate({ onAuthenticated }) {
               id: session.user.id,
               email: session.user.email,
               name: profile?.display_name || session.user.email,
-              handle: profile?.username ? "@" + profile.username : "@user",
+              handle: profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
               cabinetName: profile?.cabinet_name || null,
             });
           });
@@ -1592,6 +1624,13 @@ export default function App() {
     setAuthedUser(user);
   };
 
+  const handleSignOut = () => {
+    setAuthedUser(null);
+    setActiveTab("feed");
+    setCabinetTheme(CABINET_THEMES[0]);
+    setMyProducts(MOCK_PRODUCTS.slice(0, 7));
+  };
+
   const handleAddProduct = (product) => {
     setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, product]);
   };
@@ -1609,7 +1648,7 @@ export default function App() {
     {activeTab === "feed"    && <FeedTab />}
     {activeTab === "search"  && <SearchTab />}
     {activeTab === "explore" && <ExploreTab />}
-    {activeTab === "cabinet" && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={setCabinetTheme} onAddProduct={handleAddProduct} />}
+    {activeTab === "cabinet" && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={setCabinetTheme} onAddProduct={handleAddProduct} onSignOut={handleSignOut} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
