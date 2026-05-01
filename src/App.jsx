@@ -361,11 +361,11 @@ function AddProductModal({ onClose, onAdd }) {
 
       if (brandIds.length > 0) {
         queryBuilder = queryBuilder.or(
-          `name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,brand_id.in.(${brandIds.join(",")})`
+          `name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,brand_id.in.(${brandIds.join(",")}),search_tags.cs.{${searchQuery}}`
         );
       } else {
         queryBuilder = queryBuilder.or(
-          `name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`
+          `name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,search_tags.cs.{${searchQuery}}`
         );
       }
 
@@ -775,19 +775,21 @@ function SearchTab() {
 
       const brandIds = (brandMatches || []).map(b => b.id);
 
-      // Search product lines by name, description, or brand
+      // Search product lines by name, description, tags, or brand
       let queryBuilder = supabase
         .from("product_lines")
         .select(`id, name, category, brand_id, description, brands ( name ), products ( id, name, price_usd )`)
         .limit(12);
 
+      const tagFilter = `search_tags.cs.{${q}}`;
+
       if (brandIds.length > 0) {
         queryBuilder = queryBuilder.or(
-          `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
+          `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")}),${tagFilter}`
         );
       } else {
         queryBuilder = queryBuilder.or(
-          `name.ilike.%${q}%,description.ilike.%${q}%`
+          `name.ilike.%${q}%,description.ilike.%${q}%,${tagFilter}`
         );
       }
 
