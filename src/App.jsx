@@ -403,7 +403,10 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
 
   const handleRemove = () => {
     setRemoving(true);
-    setTimeout(() => { onRemove(product); onClose(); }, 300);
+    // Brief visual feedback, then delegate to parent
+    setTimeout(() => {
+      if (onRemove) onRemove(product);
+    }, 250);
   };
 
   const handleRepurchase = (status) => {
@@ -1837,32 +1840,36 @@ function BottomNav({ active, onChange, onAddPress }) {
 
   const [fabVisible, setFabVisible] = useState(true);
   const lastScrollY = useRef(0);
+  const fabTimer = useRef(null);
 
   useEffect(() => {
-    let ticking = false;
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const currentY = window.scrollY || document.documentElement.scrollTop;
-          // Also check scroll on the nearest scrollable container
-          const scrollable = document.querySelector('[style*="overflow"]');
-          const scrollPos = scrollable ? scrollable.scrollTop : currentY;
+    const handleScroll = (e) => {
+      const target = e.target;
+      // Only respond to elements that are actually scrollable containers
+      if (!target || target === document || !target.scrollTop && target.scrollTop !== 0) return;
 
-          if (scrollPos > lastScrollY.current + 8) {
-            setFabVisible(false); // scrolling down
-          } else if (scrollPos < lastScrollY.current - 8) {
-            setFabVisible(true); // scrolling up
-          }
-          lastScrollY.current = scrollPos;
-          ticking = false;
-        });
-        ticking = true;
+      const currentY = target.scrollTop;
+      const delta = currentY - lastScrollY.current;
+
+      if (delta > 10) {
+        setFabVisible(false); // scrolling down
+      } else if (delta < -10) {
+        setFabVisible(true); // scrolling up
       }
+
+      lastScrollY.current = currentY;
+
+      // Auto-show after stopping scroll
+      if (fabTimer.current) clearTimeout(fabTimer.current);
+      fabTimer.current = setTimeout(() => setFabVisible(true), 1500);
     };
 
-    // Listen on capturing phase to catch scrolls on inner containers
+    // Capture phase catches scroll on any descendant
     document.addEventListener("scroll", handleScroll, true);
-    return () => document.removeEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("scroll", handleScroll, true);
+      if (fabTimer.current) clearTimeout(fabTimer.current);
+    };
   }, []);
 
   return (
