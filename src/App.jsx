@@ -223,136 +223,205 @@ const MOCK_USERS = [
 const retailerColor = (r) => ({ Sephora: "#D4006A", Ulta: "#F0006E", Amazon: "#FF9900" }[r] || "#888");
 const retailerBg = (r) => ({ Sephora: "#FFF0F6", Ulta: "#FFF0F8", Amazon: "#FFF8EC" }[r] || "#F5F5F5");
 
-// ─── PRODUCT BOTTLE ──────────────────────────────────────────────────────────
+// ─── COMPACT PRODUCT CARD (3-col grid) ──────────────────────────────────────
+// The atom. Repurchase badge as primary signal. No stars.
+// Badge: ↻ (green) = would repurchase, ✕ (warm gray) = would not, ? (ghost) = unset (own only)
 
-function ProductBottle({ product, size = 64, onClick, showLabel = true }) {
+function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
   return (
-    <div className="product-slot" onClick={onClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", position: "relative", width: size + 16 }}>
-      <div style={{ width: size, height: size * 1.4, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}99)`, borderRadius: size * 0.18, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 12px ${product.color}66, inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -2px 4px rgba(0,0,0,0.1)`, position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: 0, left: "15%", width: "30%", height: "60%", background: "linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 100%)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
-        <span style={{ fontSize: size * 0.38, position: "relative", zIndex: 1 }}>{product.emoji}</span>
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.15)", padding: "3px 4px", textAlign: "center" }}>
-          <span style={{ fontSize: Math.max(7, size * 0.12), fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,0.9)", fontWeight: 500, letterSpacing: "0.04em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{product.brand.split(" ")[0].toUpperCase()}</span>
-        </div>
+    <div
+      onClick={() => onClick(product)}
+      style={{
+        background: "#FFF", borderRadius: 12, overflow: "hidden",
+        border: "1px solid #EDE9E3", cursor: "pointer",
+        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+      }}
+      className="shelf-item"
+    >
+      {/* Product image */}
+      <div style={{
+        width: "100%", aspectRatio: "0.85",
+        background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        position: "relative", overflow: "hidden",
+      }}>
+        {/* Glass highlight */}
+        <div style={{ position: "absolute", top: 0, left: "12%", width: "28%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.45),transparent)", borderRadius: "50%", transform: "skewX(-10deg)", pointerEvents: "none" }} />
+        <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>
+
+        {/* Repurchase badge */}
+        {repurchaseStatus === "repurchase" && (
+          <div style={{
+            position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%",
+            background: "rgba(74,124,89,0.18)", border: "1px solid rgba(74,124,89,0.3)",
+            backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 10, color: "#4A7C59",
+          }}>↻</div>
+        )}
+        {repurchaseStatus === "not_repurchase" && (
+          <div style={{
+            position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%",
+            background: "rgba(160,140,128,0.15)", border: "1px solid rgba(160,140,128,0.25)",
+            backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 9, color: "#A08C80",
+          }}>✕</div>
+        )}
+        {isOwn && (!repurchaseStatus || repurchaseStatus === "using") && (
+          <div style={{
+            position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%",
+            background: "rgba(160,140,128,0.06)", border: "1px dashed rgba(160,140,128,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 9, color: "#C8C0B8", opacity: 0.5,
+          }}>?</div>
+        )}
       </div>
-      {showLabel && (
-        <div className="product-label" style={{ fontSize: 10, color: "#555", textAlign: "center", lineHeight: 1.3, maxWidth: size + 16, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", fontFamily: "'Jost', sans-serif", fontWeight: 400, opacity: 0.85 }}>
-          {product.name.length > 22 ? product.name.slice(0, 22) + "…" : product.name}
+
+      {/* Info */}
+      <div style={{ padding: "6px 8px 8px" }}>
+        <div style={{
+          fontSize: 8.5, letterSpacing: "0.06em", textTransform: "uppercase",
+          color: "#BBB", fontFamily: "'DM Mono', monospace",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>{product.brand}</div>
+        <div style={{
+          fontSize: 11, color: "#1A1A1A", lineHeight: 1.3, marginTop: 1,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>{product.name}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CABINET GRID ────────────────────────────────────────────────────────────
+// 3-col grid of CompactCards with "Tried & Moved On" archive section
+
+function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "all" }) {
+  // Split products by repurchase status
+  const activeProducts = products.filter(p => p.status !== "not_repurchase");
+  const archivedProducts = products.filter(p => p.status === "not_repurchase");
+  const [showArchive, setShowArchive] = useState(false);
+
+  // Apply category filter
+  const filteredActive = activeFilter === "all"
+    ? activeProducts
+    : activeProducts.filter(p => p.category === activeFilter);
+  const filteredArchived = activeFilter === "all"
+    ? archivedProducts
+    : archivedProducts.filter(p => p.category === activeFilter);
+
+  return (
+    <div style={{ padding: "0 16px" }}>
+      {/* Main grid */}
+      {filteredActive.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>✦</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 16, color: "#BBB" }}>
+            {activeFilter !== "all" ? "Nothing in this category yet" : "Your cabinet is empty"}
+          </div>
+          <div style={{ fontSize: 12, color: "#CCC", marginTop: 4 }}>
+            Tap + to add your first product
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {filteredActive.map((product, i) => (
+            <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0 }}>
+              <CompactCard
+                product={product}
+                onClick={onProductClick}
+                isOwn={isOwn}
+                repurchaseStatus={product.status}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Archive section */}
+      {filteredArchived.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div
+            onClick={() => setShowArchive(!showArchive)}
+            style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: showArchive ? 12 : 0 }}
+          >
+            <div style={{ flex: 1, height: 0.5, background: "#E8E2D9" }} />
+            <div style={{
+              fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase",
+              color: "#C8C0B8", fontFamily: "'DM Mono', monospace",
+              display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+            }}>
+              Tried & moved on
+              <span style={{
+                fontSize: 9, background: "#FFF", border: "1px solid #EDE9E3",
+                borderRadius: 10, padding: "1px 6px",
+              }}>{filteredArchived.length}</span>
+              <span style={{ fontSize: 8, transition: "transform 0.2s", display: "inline-block", transform: showArchive ? "rotate(180deg)" : "none" }}>▼</span>
+            </div>
+            <div style={{ flex: 1, height: 0.5, background: "#E8E2D9" }} />
+          </div>
+
+          {showArchive && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, opacity: 0.65, filter: "saturate(0.4)" }}>
+              {filteredArchived.map((product, i) => (
+                <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0 }}>
+                  <CompactCard
+                    product={product}
+                    onClick={onProductClick}
+                    isOwn={isOwn}
+                    repurchaseStatus={product.status}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ─── SHELF ROW ───────────────────────────────────────────────────────────────
+// ─── PRODUCT DETAIL MODAL — 3 ownership states ─────────────────────────────
+// State 1: Discovery (not owned) — friends + aggregate stats + Add CTA
+// State 2: Owned — personal record, repurchase toggle, note
+// State 3: Archived — desaturated, "Tried & moved on" banner
 
-function ShelfRow({ products, theme, onProductClick, onAddClick, rowIndex }) {
-  const slots = [products[0], products[1], products[2]];
-  return (
-    <div style={{ marginBottom: 0, animationDelay: `${rowIndex * 0.08}s` }} className="fade-up">
-      <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", padding: "14px 20px 0", minHeight: 120, background: theme.mirrorBg, position: "relative" }}>
-        {(theme.id === "glass" || theme.id === "mirror") && (
-          <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(255,255,255,0.08) 30px, rgba(255,255,255,0.08) 31px)", pointerEvents: "none" }} />
-        )}
-        {slots.map((product, i) => (
-          <div key={i} style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            {product ? (
-              <ProductBottle product={product} size={62} onClick={() => onProductClick(product)} />
-            ) : (
-              <div onClick={onAddClick} style={{ width: 62, height: 87, border: "2px dashed rgba(0,0,0,0.12)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(0,0,0,0.2)", fontSize: 22, transition: "all 0.2s" }}>+</div>
-            )}
-          </div>
-        ))}
-      </div>
-      <div style={{ height: 14, background: theme.shelfBg, boxShadow: theme.shelfShadow, position: "relative", zIndex: 2 }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "rgba(255,255,255,0.35)" }} />
-      </div>
-    </div>
-  );
-}
-
-// ─── MEDICINE CABINET ────────────────────────────────────────────────────────
-
-function MedicineCabinet({ products, theme, onProductClick, onAddClick }) {
-  const rows = [];
-  for (let i = 0; i < Math.max(4, Math.ceil(products.length / 3) + 1); i++) {
-    rows.push(products.slice(i * 3, i * 3 + 3));
-  }
-  return (
-    <div className="cabinet-reveal" style={{ background: theme.cabinetBg, border: `6px solid ${theme.cabinetBorder}`, borderRadius: 16, overflow: "hidden", boxShadow: `0 20px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1)`, margin: "0 16px" }}>
-      <div style={{ height: 10, background: theme.edgeBg, borderBottom: `2px solid ${theme.cabinetBorder}` }} />
-      <div style={{ overflow: "hidden" }}>
-        {rows.map((row, i) => (
-          <ShelfRow key={i} products={row} theme={theme} onProductClick={onProductClick} onAddClick={onAddClick} rowIndex={i} />
-        ))}
-      </div>
-      <div style={{ height: 10, background: theme.edgeBg, borderTop: `2px solid ${theme.cabinetBorder}` }} />
-    </div>
-  );
-}
-
-// ─── PRODUCT DETAIL MODAL ────────────────────────────────────────────────────
-
-function ProductModal({ product, onClose, onRemove, isOwn }) {
+function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, isOwn, onAdd }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [note, setNote] = useState("");
+  const [editingNote, setEditingNote] = useState(false);
 
   if (!product) return null;
 
+  const isArchived = product.status === "not_repurchase";
+  const isRepurchase = product.status === "repurchase";
+  const repurchaseRate = repurchaseRateFor(product.id);
+  const friends = friendAvatarsFor(product.id);
+  const categoryLabel = CATEGORIES.find(c => c.id === product.category)?.label || product.category;
+
   const handleRemove = () => {
     setRemoving(true);
-    setTimeout(() => {
-      onRemove(product);
-      onClose();
-    }, 300);
+    setTimeout(() => { onRemove(product); onClose(); }, 300);
+  };
+
+  const handleRepurchase = (status) => {
+    if (onRepurchaseChange) onRepurchaseChange(product, status);
+    if (status === "not_repurchase") {
+      // Archive — close after brief delay
+      setTimeout(onClose, 400);
+    }
   };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", padding: "28px 24px 48px", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)" }}>
-        <div style={{ width: 40, height: 4, background: "#E0DAD2", borderRadius: 2, margin: "0 auto 24px" }} />
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", padding: "20px 20px 40px", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight: "88vh", overflowY: "auto" }}>
+        {/* Drag handle */}
+        <div style={{ width: 40, height: 4, background: "#E0DAD2", borderRadius: 2, margin: "0 auto 16px" }} />
 
-        {!confirmRemove ? (
-          <>
-            <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 24 }}>
-              <div style={{ width: 90, height: 126, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, boxShadow: `0 8px 24px ${product.color}55`, flexShrink: 0, position: "relative", overflow: "hidden" }}>
-                <div style={{ position: "absolute", top: 0, left: "15%", width: "30%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.5),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
-                {product.emoji}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{product.name}</div>
-                <div style={{ fontSize: 14, color: "#888", fontWeight: 300, marginBottom: 12 }}>{product.brand}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {product.retailer && <span style={{ background: retailerBg(product.retailer), color: retailerColor(product.retailer), fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{product.retailer}</span>}
-                  {product.price && <span style={{ background: "#F5F0EB", color: "#888", fontSize: 11, padding: "4px 10px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{product.price}</span>}
-                </div>
-              </div>
-            </div>
-
-            {product.status && (
-              <div style={{ background: "#F5F0EB", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
-                <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace", marginBottom: 4, letterSpacing: "0.06em" }}>STATUS</div>
-                <div style={{ fontSize: 15, color: "#555", fontWeight: 400, textTransform: "capitalize" }}>{(product.status || "").replace(/_/g, " ")}</div>
-              </div>
-            )}
-
-            <div style={{ background: "#F5F0EB", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
-              <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace", marginBottom: 4, letterSpacing: "0.06em" }}>CATEGORY</div>
-              <div style={{ fontSize: 15, color: "#555", fontWeight: 400 }}>{CATEGORIES.find(c => c.id === product.category)?.label || product.category}</div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: isOwn ? 12 : 0 }}>
-              <button style={{ background: "#1A1A1A", color: "#FFF", border: "none", borderRadius: 12, padding: "14px", fontSize: 14, fontWeight: 500 }}>Shop Now</button>
-              <button onClick={onClose} style={{ background: "#F0EDE8", color: "#555", border: "none", borderRadius: 12, padding: "14px", fontSize: 14, fontWeight: 400 }}>Close</button>
-            </div>
-
-            {isOwn && (
-              <button onClick={() => setConfirmRemove(true)} style={{ width: "100%", padding: "12px", background: "none", border: "none", color: "#D47070", fontSize: 13, cursor: "pointer", fontFamily: "'Jost', sans-serif" }}>
-                Remove from cabinet
-              </button>
-            )}
-          </>
-        ) : (
+        {/* ── Confirm remove state ── */}
+        {confirmRemove ? (
           <div style={{ animation: "fadeUp 0.25s ease" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#FFF0EB", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
@@ -360,20 +429,191 @@ function ProductModal({ product, onClose, onRemove, isOwn }) {
                   <path d="M6 7V20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20V7" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
                   <path d="M4 7H20" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
                   <path d="M9 7V4C9 3.4 9.4 3 10 3H14C14.6 3 15 3.4 15 4V7" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M10 11V17" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M14 11V17" stroke="#D47070" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
               </div>
               <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A", marginBottom: 6 }}>Remove this product?</div>
-              <div style={{ fontSize: 13, color: "#AAA", lineHeight: 1.6 }}>{product.name} will be removed from your cabinet.</div>
+              <div style={{ fontSize: 13, color: "#AAA", lineHeight: 1.6 }}>{product.name} will be removed entirely.</div>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setConfirmRemove(false)} style={{ flex: 1, padding: "14px", background: "#F0EDE8", color: "#555", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, fontFamily: "'Jost', sans-serif" }}>Keep it</button>
-              <button onClick={handleRemove} disabled={removing} style={{ flex: 1, padding: "14px", background: removing ? "#E0A0A0" : "#D47070", color: "#FFF", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, fontFamily: "'Jost', sans-serif", transition: "background 0.2s" }}>
+              <button onClick={handleRemove} disabled={removing} style={{ flex: 1, padding: "14px", background: removing ? "#E0A0A0" : "#D47070", color: "#FFF", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, fontFamily: "'Jost', sans-serif" }}>
                 {removing ? "Removing…" : "Remove"}
               </button>
             </div>
           </div>
+        ) : (
+          <>
+            {/* ── Archive banner ── */}
+            {isOwn && isArchived && (
+              <div style={{
+                background: "rgba(160,140,128,0.08)", border: "0.5px solid rgba(160,140,128,0.2)",
+                borderRadius: 12, padding: "10px 14px", marginBottom: 14,
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span style={{ fontSize: 12, color: "#A89E94" }}>In Tried & Moved On</span>
+                <button onClick={() => handleRepurchase("using")} style={{ fontSize: 11, color: "#8B6F47", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", fontFamily: "'Jost', sans-serif" }}>Move back</button>
+              </div>
+            )}
+
+            {/* ── Product hero ── */}
+            <div style={{
+              width: "100%", aspectRatio: "1.4", borderRadius: 18, marginBottom: 16,
+              background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              position: "relative", overflow: "hidden",
+              filter: isArchived ? "saturate(0.4)" : "none",
+            }}>
+              <div style={{ position: "absolute", top: 0, left: "10%", width: "25%", height: "50%", background: "linear-gradient(180deg,rgba(255,255,255,0.4),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
+              <span style={{ fontSize: 64, position: "relative", zIndex: 1 }}>{product.emoji}</span>
+            </div>
+
+            {/* ── Meta ── */}
+            <div style={{ marginBottom: 14, borderBottom: "0.5px solid #F0EDE8", paddingBottom: 14 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", marginBottom: 3 }}>{product.brand}</div>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: isArchived ? "#888" : "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{product.name}</div>
+              <div style={{ fontSize: 12, color: "#AAA" }}>
+                {categoryLabel}
+                {product.price ? ` · ${product.price}` : ""}
+              </div>
+            </div>
+
+            {/* ── Repurchase toggle (own products only) ── */}
+            {isOwn && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <button
+                  onClick={() => handleRepurchase(isRepurchase ? "using" : "repurchase")}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10,
+                    border: `1.5px solid ${isRepurchase ? "#4A7C59" : "rgba(74,124,89,0.25)"}`,
+                    background: isRepurchase ? "rgba(74,124,89,0.12)" : "rgba(74,124,89,0.05)",
+                    color: "#4A7C59", fontSize: 12, fontWeight: isRepurchase ? 600 : 400,
+                    fontFamily: "'Jost', sans-serif", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                    transition: "all 0.2s",
+                  }}
+                >↻ Would buy again</button>
+                <button
+                  onClick={() => handleRepurchase(isArchived ? "using" : "not_repurchase")}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10,
+                    border: `1.5px solid ${isArchived ? "rgba(160,140,128,0.4)" : "rgba(160,140,128,0.2)"}`,
+                    background: isArchived ? "rgba(160,140,128,0.12)" : "rgba(160,140,128,0.05)",
+                    color: "#A89E94", fontSize: 12, fontWeight: isArchived ? 600 : 400,
+                    fontFamily: "'Jost', sans-serif", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                    transition: "all 0.2s",
+                  }}
+                >✕ Pass</button>
+              </div>
+            )}
+
+            {/* ── Read-only repurchase (viewing someone else's) ── */}
+            {!isOwn && isRepurchase && (
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: "rgba(74,124,89,0.1)", border: "1px solid rgba(74,124,89,0.2)",
+                borderRadius: 20, padding: "7px 14px", marginBottom: 14,
+              }}>
+                <span style={{ color: "#4A7C59", fontSize: 13 }}>↻</span>
+                <span style={{ fontSize: 12, color: "#4A7C59" }}>Would buy this again</span>
+              </div>
+            )}
+
+            {/* ── Signals row ── */}
+            {isOwn && (
+              <div style={{ display: "flex", borderTop: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", marginBottom: 14 }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0", borderRight: "0.5px solid #F0EDE8" }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, color: "#1A1A1A" }}>
+                    {isArchived ? "—" : "New"}
+                  </div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB" }}>
+                    {isArchived ? "tried for" : "on shelf"}
+                  </div>
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0", borderRight: "0.5px solid #F0EDE8" }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, color: "#1A1A1A" }}>1st</div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB" }}>bottle</div>
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0" }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 500, color: "#1A1A1A" }}>{categoryLabel}</div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB" }}>category</div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Discovery stats (not owned) ── */}
+            {!isOwn && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                {repurchaseRate !== null && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 16, background: "rgba(74,124,89,0.08)", border: "1px solid rgba(74,124,89,0.18)" }}>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#4A7C59" }}>↻ {repurchaseRate}%</span>
+                    <span style={{ fontSize: 10, color: "#4A7C59", opacity: 0.7 }}>repurchase</span>
+                  </div>
+                )}
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 16, background: "#F5F0EA", border: "1px solid #EDE9E3" }}>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#888" }}>{categoryLabel}</span>
+                </div>
+              </div>
+            )}
+
+            {/* ── Note section (own products) ── */}
+            {isOwn && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>Your note</div>
+                {editingNote ? (
+                  <div style={{ background: "#FFF", border: "1px solid #EDE9E3", borderRadius: 12, overflow: "hidden" }}>
+                    <textarea
+                      value={note}
+                      onChange={e => setNote(e.target.value)}
+                      placeholder="What do you love about this?"
+                      autoFocus
+                      rows={3}
+                      style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "'Jost', sans-serif", fontSize: 13, color: "#1A1A1A", lineHeight: 1.65, padding: "12px 14px", resize: "none" }}
+                    />
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "8px 12px", borderTop: "0.5px solid #F0EDE8" }}>
+                      <button onClick={() => setEditingNote(false)} style={{ fontSize: 11, color: "#AAA", background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost', sans-serif" }}>Cancel</button>
+                      <button onClick={() => setEditingNote(false)} style={{ fontSize: 11, color: "#FFF", background: "#1A1A1A", border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "'Jost', sans-serif" }}>Save</button>
+                    </div>
+                  </div>
+                ) : note ? (
+                  <div style={{ background: "#FFF", border: "0.5px solid #EDE9E3", borderRadius: 12, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 13, color: "#666", lineHeight: 1.65, fontStyle: "italic" }}>"{note}"</div>
+                    <button onClick={() => setEditingNote(true)} style={{ fontSize: 10, color: "#BBB", background: "none", border: "none", cursor: "pointer", marginTop: 6, fontFamily: "'DM Mono', monospace" }}>✎ Edit note</button>
+                  </div>
+                ) : (
+                  <div onClick={() => setEditingNote(true)} style={{ border: "1px dashed #E8E2D9", borderRadius: 12, padding: "14px", textAlign: "center", cursor: "pointer" }}>
+                    <div style={{ fontSize: 12, color: "#C8C0B8", fontStyle: "italic" }}>What do you love about this?</div>
+                    <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>✎ Add a note</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Friends section (discovery) ── */}
+            {!isOwn && friends.length > 0 && (
+              <div style={{ borderTop: "0.5px solid #F0EDE8", paddingTop: 14, marginBottom: 14 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", marginBottom: 10 }}>Friends who have this</div>
+                {friends.map((f, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: f.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 600, color: "#FFF", fontFamily: "'DM Mono', monospace" }}>{f.initials}</div>
+                    <span style={{ fontSize: 12, color: "#555" }}>{f.initials}</span>
+                    <span style={{ fontSize: 10, color: "#4A7C59" }}>↻</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Actions ── */}
+            {!isOwn ? (
+              <button onClick={() => { if (onAdd) onAdd(product); onClose(); }} style={{ width: "100%", padding: "14px", background: "#1A1A1A", color: "#FFF", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, fontFamily: "'Jost', sans-serif" }}>
+                + Add to my cabinet
+              </button>
+            ) : (
+              <button onClick={() => setConfirmRemove(true)} style={{ width: "100%", padding: "12px", background: "none", border: "none", color: "#D47070", fontSize: 13, cursor: "pointer", fontFamily: "'Jost', sans-serif" }}>
+                Remove from cabinet
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -697,6 +937,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("all");
   const [toast, setToast] = useState(null);
   const undoRef = useRef(null);
 
@@ -712,42 +953,52 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   };
 
   const handleRemove = (product) => {
-    // Optimistic remove — show toast with undo
-    onRemoveProduct(product, false); // false = don't persist yet
+    onRemoveProduct(product, false);
     setSelectedProduct(null);
-
-    // Show undo toast
     setToast({ product, visible: true });
-
-    // Clear any existing undo timer
     if (undoRef.current) clearTimeout(undoRef.current);
-
-    // Auto-persist after 5 seconds
     undoRef.current = setTimeout(() => {
-      onRemoveProduct(product, true); // true = persist to Supabase
+      onRemoveProduct(product, true);
       setToast(null);
     }, 5000);
   };
 
   const handleUndo = () => {
     if (undoRef.current) clearTimeout(undoRef.current);
-    if (toast?.product) {
-      // Re-add the product locally (no Supabase write needed — it was never deleted)
-      onAddProduct(toast.product);
-    }
+    if (toast?.product) onAddProduct(toast.product);
     setToast(null);
   };
+
+  const handleRepurchaseChange = async (product, status) => {
+    // Optimistic local update
+    const updated = products.map(p => p.id === product.id ? { ...p, status } : p);
+    // We need to update via parent — for now update the selected product display
+    setSelectedProduct(prev => prev ? { ...prev, status } : null);
+
+    // Persist to Supabase
+    if (user?.id && product.id) {
+      await supabase
+        .from("user_products")
+        .update({ status })
+        .eq("user_id", user.id)
+        .eq("product_id", product.id)
+        .is("deleted_at", null);
+    }
+  };
+
+  // Count products per category (active only)
+  const activeProducts = products.filter(p => p.status !== "not_repurchase");
 
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
       <div style={{ padding: "20px 20px 16px", background: "#FDFAF7" }}>
-        {/* Profile header row */}
+        {/* Profile header */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
           <div style={{ width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg, #D4A5A5, #A5B8C8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>{initials}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A" }}>{cabinetName}</div>
             <div style={{ fontSize: 13, fontWeight: 500, color: "#1A1A1A", marginBottom: 1 }}>{displayName}</div>
-            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{handle} · {products.length} products</div>
+            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{handle} · {activeProducts.length} products</div>
           </div>
           <button onClick={() => setShowSettings(s => !s)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 10, width: 36, height: 36, fontSize: 16, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>⚙</button>
         </div>
@@ -768,20 +1019,48 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
           </div>
         )}
 
-        {/* Category chips */}
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-          {CATEGORIES.map(cat => (
-            <div key={cat.id} style={{ background: cat.color + "33", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 500, color: "#555", whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-              {cat.label} · {products.filter(p => p.category === cat.id).length}
-            </div>
-          ))}
+        {/* Category filter pills */}
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <button
+            onClick={() => setActiveFilter("all")}
+            style={{
+              background: activeFilter === "all" ? "#1A1A1A" : "transparent",
+              border: `1.5px solid ${activeFilter === "all" ? "#1A1A1A" : "#E5E0D8"}`,
+              borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 500,
+              color: activeFilter === "all" ? "#FFF" : "#888",
+              whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0,
+              cursor: "pointer", transition: "all 0.2s",
+            }}
+          >All · {activeProducts.length}</button>
+          {CATEGORIES.map(cat => {
+            const count = activeProducts.filter(p => p.category === cat.id).length;
+            if (!count && activeFilter !== cat.id) return null;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActiveFilter(activeFilter === cat.id ? "all" : cat.id)}
+                style={{
+                  background: activeFilter === cat.id ? "#1A1A1A" : "transparent",
+                  border: `1.5px solid ${activeFilter === cat.id ? "#1A1A1A" : "#E5E0D8"}`,
+                  borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 500,
+                  color: activeFilter === cat.id ? "#FFF" : "#888",
+                  whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0,
+                  cursor: "pointer", transition: "all 0.2s",
+                }}
+              >{cat.label} · {count}</button>
+            );
+          })}
         </div>
       </div>
-      <MedicineCabinet products={products} theme={theme} onProductClick={setSelectedProduct} onAddClick={() => setShowAddModal(true)} />
-      <div style={{ padding: "20px 20px 0" }}>
-        <button onClick={() => setShowAddModal(true)} style={{ width: "100%", padding: "16px", background: "#1A1A1A", border: "none", borderRadius: 14, color: "#FFF", fontSize: 15, fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <span style={{ fontSize: 20 }}>＋</span> Add Product to Cabinet
-        </button>
+
+      {/* Cabinet grid */}
+      <div style={{ paddingTop: 12 }}>
+        <CabinetGrid
+          products={products}
+          onProductClick={setSelectedProduct}
+          isOwn={true}
+          activeFilter={activeFilter}
+        />
       </div>
 
       {/* Undo toast */}
@@ -801,7 +1080,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
       )}
 
       {showThemePicker && <ThemePicker current={theme} onSelect={onThemeChange} onClose={() => setShowThemePicker(false)} />}
-      {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} isOwn={true} />}
+      {selectedProduct && <ProductDetailModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} onRepurchaseChange={handleRepurchaseChange} isOwn={true} />}
       {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={p => { onAddProduct(p); }} />}
     </div>
   );
@@ -874,16 +1153,7 @@ function UserProfileView({ user, onBack }) {
         </div>
         {tab === "cabinet" && (
           <div>
-            <MedicineCabinet products={user.products} theme={user.cabinetTheme} onProductClick={setSelectedProduct} onAddClick={() => {}} />
-            <div style={{ padding: "12px 20px" }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {CATEGORIES.map(cat => {
-                  const count = user.products.filter(p => p.category === cat.id).length;
-                  if (!count) return null;
-                  return <span key={cat.id} style={{ background: cat.color + "33", borderRadius: 20, padding: "4px 10px", fontSize: 11, color: "#666", fontFamily: "'DM Mono', monospace" }}>{cat.label} · {count}</span>;
-                })}
-              </div>
-            </div>
+            <CabinetGrid products={user.products} onProductClick={setSelectedProduct} isOwn={false} />
           </div>
         )}
         {tab === "posts" && (
@@ -897,7 +1167,7 @@ function UserProfileView({ user, onBack }) {
           </div>
         )}
       </div>
-      {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} />}
+      {selectedProduct && <ProductDetailModal product={selectedProduct} onClose={() => setSelectedProduct(null)} isOwn={false} />}
     </div>
   );
 }
