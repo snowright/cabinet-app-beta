@@ -394,8 +394,8 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
           {isOwn && (
             <div style={{ display: "flex", borderTop: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", marginBottom: 14 }}>
               {[
-                { val: isArchived ? "—" : "New", label: isArchived ? "tried for" : "on shelf" },
-                { val: "1st", label: "bottle" },
+                { val: product.addedAt ? new Date(product.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "New", label: "added" },
+                { val: isArchived ? "Passed" : isRepurchase ? "↻ Yes" : "Using", label: "status" },
                 { val: categoryLabel, label: "category" },
               ].map((s, i) => (
                 <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0", borderRight: i < 2 ? "0.5px solid #F0EDE8" : "none" }}>
@@ -491,7 +491,7 @@ function AddProductModal({ onClose, onAdd }) {
       });
   }, [selectedCategory]);
 
-  const handleAdd = (product) => { setAdding(true); setTimeout(() => { onAdd(product); onClose(); }, 600); };
+  const handleAdd = (product) => { setAdding(true); setTimeout(() => { onAdd(product); onClose(); }, 1600); };
   const goBack = () => { setMode(null); setSearchQuery(""); setSelectedCategory(null); };
 
   const ADD_METHODS = [
@@ -941,7 +941,12 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 
   const handleUndo = () => {
     if (undoRef.current) clearTimeout(undoRef.current);
-    if (toast?.product) onAddProduct(toast.product);
+    // Immediately restore to local state — no refresh needed
+    if (toast?.product) {
+      onAddProduct(toast.product);
+      // Cancel the pending Supabase soft-delete
+      onRemoveProduct(toast.product, false);
+    }
     setToast(null);
   };
 
@@ -992,9 +997,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
         {showSettings && (
           <div style={{ background: "#FFF", border: "1.5px solid #EDE9E3", borderRadius: 12, padding: "12px 14px", marginBottom: 12, animation: "fadeUp 0.2s ease" }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#BBB", letterSpacing: "0.1em", marginBottom: 10, textTransform: "uppercase" }}>Settings</div>
-            <button onClick={() => setShowThemePicker(true)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "none", border: "none", borderBottom: "0.5px solid #F0EDE8", color: "#1A1A1A", fontSize: 13, textAlign: "left" }}>
-              <span style={{ fontSize: 16 }}>{theme.emoji}</span><span style={{ flex: 1 }}>Cabinet Style</span><span style={{ fontSize: 12, color: "#AAA" }}>→</span>
-            </button>
+            {/* TODO: Cabinet themes removed — grid UI redesign needed to match new larger card sizes. Re-enable after redesign. */}
             <button onClick={handleSignOut} disabled={signingOut} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "none", border: "none", color: "#E07070", fontSize: 13, textAlign: "left", cursor: signingOut ? "default" : "pointer" }}>
               <span style={{ fontSize: 16 }}>↪</span><span>{signingOut ? "Signing out…" : "Sign Out"}</span>
             </button>
@@ -1027,7 +1030,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
         </div>
       )}
 
-      {showThemePicker && <ThemePicker current={theme} onSelect={onThemeChange} onClose={() => setShowThemePicker(false)} />}
+      {/* TODO: ThemePicker disabled — cabinet theme redesign pending */}
       {showEditProfile  && <EditProfileModal user={user} onClose={() => setShowEditProfile(false)} onUpdate={onUpdateUser} />}
       {selectedProduct  && <ProductDetailModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} onRepurchaseChange={handleRepurchase} isOwn={true} />}
     </div>
@@ -1278,7 +1281,30 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
   const handleAdd      = (product) => { setAddedIds(prev => new Set([...prev, product.id])); onAddProduct?.(product); };
 
   const q = query.toLowerCase().trim();
-  const userResults  = q.length > 0 ? MOCK_USERS.filter(u => u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q) || u.bio.toLowerCase().includes(q)) : [];
+  const [userResults, setUserResults] = useState([]);
+
+  useEffect(() => {
+    if (q.length < 1) { setUserResults([]); return; }
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, bio")
+        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
+        .limit(8);
+      if (error) { console.warn("[DiscoverTab] user search:", error.message); return; }
+      setUserResults((data || []).map(p => ({
+        id:          p.id,
+        name:        p.display_name || p.username || "cabinet. user",
+        handle:      p.username ? "@" + p.username : "@user",
+        avatar:      (p.display_name || p.username || "CB").split(/[\s._-]/).map(n => n[0]).filter(Boolean).join("").slice(0,2).toUpperCase(),
+        avatarUrl:   p.avatar_url || null,
+        avatarColor: stringToColor(p.id),
+        bio:         p.bio || "",
+        followers: 0, following: 0, products: [], cabinetTheme: CABINET_THEMES[0], posts: [],
+      })));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [q]);
   const topicResults = q.length > 0 ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : [];
   const hasResults   = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
   const showPeople   = activeFilter === "all" || activeFilter === "people";
@@ -1930,6 +1956,71 @@ function OnboardingScreen({ user, onComplete }) {
   );
 }
 
+// ─── RESET PASSWORD SCREEN ───────────────────────────────────────────────────
+// Shown when user clicks the Supabase reset link.
+// Updates the password, clears the session, then routes to sign in.
+
+function ResetPasswordScreen({ onDone }) {
+  const [password,  setPassword]  = useState("");
+  const [confirm,   setConfirm]   = useState("");
+  const [loading,   setLoading]   = useState(false);
+  const [errors,    setErrors]    = useState({});
+  const [done,      setDone]      = useState(false);
+
+  const submit = async () => {
+    const e = {};
+    if (password.length < 8)       e.password = "Must be at least 8 characters";
+    if (password !== confirm)      e.confirm  = "Passwords don't match";
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setErrors({ password: error.message });
+      setLoading(false);
+      return;
+    }
+    // Sign out so user consciously signs back in with new password
+    await supabase.auth.signOut();
+    setLoading(false);
+    setDone(true);
+    setTimeout(onDone, 2000);
+  };
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#F7F5F2", animation: "fadeUp 0.4s ease" }}>
+      <div style={{ flex: 1, padding: "56px 24px 0", display: "flex", flexDirection: "column" }}>
+        {done ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingBottom: 80 }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>✓</div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", textAlign: "center", marginBottom: 8 }}>Password updated</div>
+            <div style={{ fontSize: 14, color: "#AAA", textAlign: "center" }}>Taking you to sign in…</div>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 600, color: "#1A1A1A", marginBottom: 6 }}>Set new password</div>
+            <div style={{ fontSize: 14, color: "#AAA", marginBottom: 36, lineHeight: 1.6 }}>Choose something strong. You'll use this to sign in from now on.</div>
+            <AuthInput label="NEW PASSWORD" type="password" value={password} onChange={setPassword} placeholder="••••••••" error={errors.password} autoFocus />
+            <AuthInput label="CONFIRM PASSWORD" type="password" value={confirm} onChange={setConfirm} placeholder="••••••••" error={errors.confirm} />
+            {password.length > 0 && (
+              <div style={{ marginTop: -10, marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
+                  {[1,2,3,4].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: password.length >= i*3 ? (password.length >= 12 ? "#7EC8A0" : password.length >= 8 ? "#C8B87E" : "#E07070") : "#E5E0D8", transition: "background 0.3s" }} />)}
+                </div>
+                <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: password.length >= 12 ? "#7EC8A0" : password.length >= 8 ? "#C8B87E" : "#E07070" }}>
+                  {password.length >= 12 ? "Strong" : password.length >= 8 ? "Good" : "Too short"}
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: "auto", paddingBottom: 48 }}>
+              <AuthBtn label="Update password" onClick={submit} loading={loading} />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AuthGate({ onAuthenticated }) {
   const [screen, setScreen]         = useState("splash");
   const [pendingUser, setPendingUser] = useState(null);
@@ -1940,6 +2031,15 @@ function AuthGate({ onAuthenticated }) {
     // which can fire before the session is ready, causing profile reads to fail silently.
     // getSession handles the initial load — it reads from local storage immediately
     // so the splash never hangs. onAuthStateChange then keeps the session live.
+    // Handle password reset links — Supabase fires a hash event we need to catch
+    // before getSession so we can show the reset UI instead of auto-logging in
+    const hash = window.location.hash;
+    if (hash.includes("type=recovery")) {
+      setChecking(false);
+      setScreen("resetPassword");
+      return;
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { setChecking(false); return; }
 
@@ -1976,11 +2076,12 @@ function AuthGate({ onAuthenticated }) {
     </div>
   );
 
-  if (screen === "splash")     return <SplashScreen onSignIn={() => setScreen("signin")} onSignUp={() => setScreen("signup")} />;
-  if (screen === "signin")     return <SignInScreen onBack={() => setScreen("splash")} onForgot={() => setScreen("forgot")} onSuccess={user => onAuthenticated(user)} />;
-  if (screen === "signup")     return <SignUpScreen onBack={() => setScreen("splash")} onSuccess={user => { setPendingUser(user); setScreen("verify"); }} />;
-  if (screen === "forgot")     return <ForgotPasswordScreen onBack={() => setScreen("signin")} />;
-  if (screen === "verify")     return <VerifyEmailScreen user={pendingUser} onVerified={() => setScreen("onboarding")} />;
+  if (screen === "splash")       return <SplashScreen onSignIn={() => setScreen("signin")} onSignUp={() => setScreen("signup")} />;
+  if (screen === "signin")       return <SignInScreen onBack={() => setScreen("splash")} onForgot={() => setScreen("forgot")} onSuccess={user => onAuthenticated(user)} />;
+  if (screen === "signup")       return <SignUpScreen onBack={() => setScreen("splash")} onSuccess={user => { setPendingUser(user); setScreen("verify"); }} />;
+  if (screen === "forgot")       return <ForgotPasswordScreen onBack={() => setScreen("signin")} />;
+  if (screen === "verify")       return <VerifyEmailScreen user={pendingUser} onVerified={() => setScreen("onboarding")} />;
+  if (screen === "resetPassword") return <ResetPasswordScreen onDone={() => setScreen("signin")} />;
   if (screen === "onboarding") return <OnboardingScreen user={pendingUser} onComplete={(theme, cabinetName) => onAuthenticated({ ...pendingUser, cabinetTheme: theme, cabinetName })} />;
   return null;
 }
@@ -2002,7 +2103,7 @@ export default function App() {
     if (savedThemeId) { const saved = CABINET_THEMES.find(t => t.id === savedThemeId); if (saved) setCabinetTheme(saved); }
 
     const { data: userProducts } = await supabase.from("user_products")
-      .select("id, product_id, status, notes, products ( id, name, price_usd, image_url, product_lines ( name, category, brands ( name ) ) )")
+      .select("id, product_id, status, notes, created_at, products ( id, name, price_usd, image_url, product_lines ( name, category, brands ( name ) ) )")
       .eq("user_id", userId).is("deleted_at", null).order("created_at", { ascending: false });
 
     if (userProducts?.length > 0) {
@@ -2013,7 +2114,7 @@ export default function App() {
         seen.add(up.product_id);
         const p = up.products;
         const pl = p.product_lines;
-        products.push({ id: p.id, user_product_id: up.id, name: pl?.name || p.name, sku: p.name, brand: pl?.brands?.name || "", category: pl?.category || "other", price: p.price_usd ? `$${p.price_usd}` : "", emoji: categoryEmoji(pl?.category), color: categoryColor(pl?.category), status: up.status });
+        products.push({ id: p.id, user_product_id: up.id, name: pl?.name || p.name, sku: p.name, brand: pl?.brands?.name || "", category: pl?.category || "other", price: p.price_usd ? `$${p.price_usd}` : "", emoji: categoryEmoji(pl?.category), color: categoryColor(pl?.category), status: up.status, addedAt: up.created_at });
       }
       setMyProducts(products);
     }
@@ -2025,7 +2126,7 @@ export default function App() {
 
   const handleAddProduct = async (product) => {
     // Optimistic local update first so UI feels instant
-    setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, { ...product, status: "using" }]);
+    setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, { ...product, status: "using", addedAt: new Date().toISOString() }]);
 
     if (authedUser?.id && product.id) {
       const { data, error } = await supabase
