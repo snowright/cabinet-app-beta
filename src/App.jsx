@@ -161,9 +161,9 @@ function useProductSearch(query) {
             ? `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
             : `name.ilike.%${q}%,description.ilike.%${q}%`)
           .limit(12),
-        // search_tags query re-enable after: ALTER TABLE product_lines ADD COLUMN search_tags TEXT;
-        // supabase.from("product_lines").select(baseSelect)
-        //   .ilike("search_tags::text", `%${q}%`).limit(12),
+        // search_tags is text[] — use array-to-text cast for ilike search
+        supabase.from("product_lines").select(baseSelect)
+          .ilike("search_tags::text", `%${q}%`).limit(12),
         ...((isBlackOwned || isIndie) && brandIds.length > 0
           ? [supabase.from("product_lines").select(baseSelect).in("brand_id", brandIds).limit(20)]
           : []),
