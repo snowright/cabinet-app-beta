@@ -803,7 +803,7 @@ function EditProfileModal({ user, onClose, onUpdate }) {
 
       // Re-read from DB to confirm write succeeded and surface the true stored values
       const { data: fresh } = await supabase.from("profiles")
-        .select("display_name, username, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name")
+        .select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -1608,10 +1608,11 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         setErrors({ password: error.message.includes("Invalid login credentials") ? "Incorrect email or password" : error.message.includes("Email not confirmed") ? "Please verify your email first — check your inbox" : error.message });
         setLoading(false); return;
       }
-      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, cabinet_theme, role")
+      const { data: profile } = await supabase.from("profiles").select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
         .eq("id", data.user.id)
         .maybeSingle();
-      const savedTheme = profile?.cabinet_theme ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null : null;
+      const savedThemeId = localStorage.getItem("cabinet_theme_" + data.user.id);
+      const savedTheme = savedThemeId ? CABINET_THEMES.find(t => t.id === savedThemeId) || CABINET_THEMES[0] : CABINET_THEMES[0];
       setLoading(false);
       onSuccess({
         id: data.user.id, email: data.user.email,
@@ -1758,7 +1759,10 @@ function OnboardingScreen({ user, onComplete }) {
     setLoading(true);
     const theme     = CABINET_THEMES.find(t => t.id === selectedTheme);
     const finalName = cabinetName.trim() || (user?.name ? `${user.name.split(" ")[0]}'s Cabinet` : "My Cabinet");
-    if (user?.id) await supabase.from("profiles").update({ onboarding_complete: true, cabinet_name: finalName, cabinet_theme: selectedTheme }).eq("id", user.id);
+    if (user?.id) {
+      await supabase.from("profiles").update({ onboarding_complete: true, cabinet_name: finalName }).eq("id", user.id);
+      localStorage.setItem("cabinet_theme_" + user.id, selectedTheme);
+    }
     setLoading(false);
     onComplete(theme, finalName);
   };
@@ -1816,15 +1820,14 @@ function AuthGate({ onAuthenticated }) {
       if (!session?.user) { setChecking(false); return; }
 
       const { data: profile, error } = await supabase.from("profiles")
-        .select("display_name, username, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, cabinet_theme, role")
+        .select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
         .eq("id", session.user.id)
         .maybeSingle();
 
       if (error) console.warn("[AuthGate] profile fetch error:", error.message);
 
-      const savedTheme = profile?.cabinet_theme
-        ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
-        : null;
+      const savedThemeId = localStorage.getItem("cabinet_theme_" + session.user.id);
+      const savedTheme = savedThemeId ? CABINET_THEMES.find(t => t.id === savedThemeId) || CABINET_THEMES[0] : CABINET_THEMES[0];
 
       onAuthenticated({
         id:           session.user.id,
@@ -1870,8 +1873,9 @@ export default function App() {
 
   const loadCabinet = async (userId) => {
     setLoadingCabinet(true);
-    const { data: profile } = await supabase.from("profiles").select("cabinet_theme").eq("id", userId).maybeSingle();
-    if (profile?.cabinet_theme) { const saved = CABINET_THEMES.find(t => t.id === profile.cabinet_theme); if (saved) setCabinetTheme(saved); }
+    // cabinet_theme is stored in localStorage keyed by user ID (not in DB)
+    const savedThemeId = localStorage.getItem("cabinet_theme_" + userId);
+    if (savedThemeId) { const saved = CABINET_THEMES.find(t => t.id === savedThemeId); if (saved) setCabinetTheme(saved); }
 
     const { data: userProducts } = await supabase.from("user_products")
       .select("id, product_id, status, notes, products ( id, name, price_usd, image_url, product_lines ( name, category, brands ( name ) ) )")
@@ -1931,9 +1935,9 @@ export default function App() {
     if (error) console.warn("[handleRemoveProduct] update error:", error.message);
   };
 
-  const handleThemeChange = async (theme) => {
+  const handleThemeChange = (theme) => {
     setCabinetTheme(theme);
-    if (authedUser?.id) await supabase.from("profiles").update({ cabinet_theme: theme.id }).eq("id", authedUser.id);
+    if (authedUser?.id) localStorage.setItem("cabinet_theme_" + authedUser.id, theme.id);
   };
 
   const handleRepurchaseChange = async (product, status) => {
