@@ -201,9 +201,20 @@ function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20
       style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", padding, animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, overflowY: "auto" }}>
-        <div style={{ width: 40, height: 4, background: "#E0DAD2", borderRadius: 2, margin: "0 auto 16px" }} />
-        {children}
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, overflowY: "auto", position: "relative" }}>
+        {/* Sticky header: decorative pill (no drag logic) + × close button */}
+        <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
+          <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          >✕</button>
+        </div>
+        {/* Sheet content */}
+        <div style={{ padding }}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -670,10 +681,13 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const [toast, setToast]                     = useState(null);
   const undoRef = useRef(null);
 
-  const displayName  = user?.name || "User";
-  const handle       = user?.handle || "@user";
-  const cabinetName  = user?.cabinetName || `${displayName.split(" ")[0]}'s Cabinet`;
-  const initials     = displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "ME";
+  // If profile.display_name was never set, user.name falls back to the raw email.
+  // Strip the @domain so it reads like a name hint rather than an email address.
+  const rawName     = user?.name || "";
+  const displayName = rawName.includes("@") ? rawName.split("@")[0] : rawName || "User";
+  const handle      = user?.handle || "@user";
+  const cabinetName = user?.cabinetName || `${displayName.split(" ")[0]}'s Cabinet`;
+  const initials    = displayName.split(/[\s._-]/).map(n => n[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "ME";
   const activeProducts = products.filter(p => p.status !== "not_repurchase");
 
   const handleSignOut = async () => { setSigningOut(true); await supabase.auth.signOut(); onSignOut(); };
