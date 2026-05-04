@@ -904,7 +904,7 @@ function EditProfileModal({ user, onClose, onUpdate }) {
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRepurchaseChange, onSignOut, onUpdateUser, loading }) {
+function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRestoreProduct, onRepurchaseChange, onSignOut, onUpdateUser, loading }) {
   const [showThemePicker,  setShowThemePicker]  = useState(false);
   const [showEditProfile,  setShowEditProfile]  = useState(false);
   const [selectedProduct,  setSelectedProduct]  = useState(null);
@@ -926,11 +926,13 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const handleSignOut = async () => { setSigningOut(true); await supabase.auth.signOut(); onSignOut(); };
 
   const handleRemove = (product) => {
-    onRemoveProduct(product, false);
+    // Snapshot the full product object before removing — needed for clean undo
+    const snapshot = { ...product };
+    onRemoveProduct(product, false);   // optimistic local remove
     setSelectedProduct(null);
-    setToast({ product, visible: true });
+    setToast({ product: snapshot, visible: true });
     if (undoRef.current) clearTimeout(undoRef.current);
-    undoRef.current = setTimeout(() => { onRemoveProduct(product, true); setToast(null); }, 5000);
+    undoRef.current = setTimeout(() => { onRemoveProduct(snapshot, true); setToast(null); }, 5000);
   };
 
   const handleRepurchase = (product, status) => {
@@ -941,11 +943,11 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 
   const handleUndo = () => {
     if (undoRef.current) clearTimeout(undoRef.current);
-    // Immediately restore to local state — no refresh needed
+    // Restore directly to local products state — do NOT call onAddProduct
+    // which would re-insert to Supabase. The row was never deleted (persist=false),
+    // so we just put it back in local state.
     if (toast?.product) {
-      onAddProduct(toast.product);
-      // Cancel the pending Supabase soft-delete
-      onRemoveProduct(toast.product, false);
+      onRestoreProduct(toast.product);
     }
     setToast(null);
   };
@@ -1248,7 +1250,7 @@ function UserProfileView({ user, onBack }) {
 
 // ─── DISCOVER TAB ─────────────────────────────────────────────────────────────
 
-function DiscoverTab({ myProducts = [], onAddProduct }) {
+function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
   const [query, setQuery]                 = useState("");
   const [activeFilter, setActiveFilter]   = useState("all");
   const [selectedUser, setSelectedUser]   = useState(null);
@@ -1286,11 +1288,14 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
   useEffect(() => {
     if (q.length < 1) { setUserResults([]); return; }
     const timer = setTimeout(async () => {
-      const { data, error } = await supabase
+      let userQuery = supabase
         .from("profiles")
         .select("id, username, display_name, avatar_url, bio")
         .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
         .limit(8);
+      // Exclude the current user from their own search results
+      if (currentUserId) userQuery = userQuery.neq("id", currentUserId);
+      const { data, error } = await userQuery;
       if (error) { console.warn("[DiscoverTab] user search:", error.message); return; }
       setUserResults((data || []).map(p => ({
         id:          p.id,
@@ -2144,6 +2149,10 @@ export default function App() {
     }
   };
 
+  const handleRestoreProduct = (product) => {
+    setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [product, ...prev]);
+  };
+
   const handleRemoveProduct = async (product, persist) => {
     if (!persist) { setMyProducts(prev => prev.filter(p => p.id !== product.id)); return; }
 
@@ -2193,8 +2202,8 @@ export default function App() {
 
   return shell(<>
     {activeTab === "feed"     && <FeedTab currentUserId={authedUser?.id} />}
-    {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} />}
-    {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onRepurchaseChange={handleRepurchaseChange} onSignOut={handleSignOut} onUpdateUser={u => setAuthedUser(u)} loading={loadingCabinet} />}
+    {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} currentUserId={authedUser?.id} />}
+    {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onRestoreProduct={handleRestoreProduct} onRepurchaseChange={handleRepurchaseChange} onSignOut={handleSignOut} onUpdateUser={u => setAuthedUser(u)} loading={loadingCabinet} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
