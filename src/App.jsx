@@ -639,7 +639,7 @@ function FeedPostCard({ post, index }) {
   return (
     <div className="fade-up" style={{ background: "#FFF", borderRadius: 20, border: "1.5px solid #EDE9E3", padding: "18px", marginBottom: 12, animationDelay: `${index * 0.07}s`, opacity: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 40, height: 40, borderRadius: "50%", background: post.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700, color: "#FFF", flexShrink: 0 }}>{post.avatar}</div>
+        <Avatar avatarUrl={post.avatarUrl} initials={post.initials || post.avatar} size={40} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#1A1A1A" }}>{post.user}</div>
           <div style={{ fontSize: 11, color: "#BBB", fontFamily: "'DM Mono', monospace" }}>{post.handle} · {post.time}</div>
@@ -1036,26 +1036,150 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 
 // ─── FEED TAB ────────────────────────────────────────────────────────────────
 
-function FeedTab() {
-  const [filter, setFilter] = useState("All");
-  const filtered = filter === "All" ? FEED_POSTS : FEED_POSTS.filter(p => p.product.category === CATEGORIES.find(c => c.label === filter)?.id);
+function FeedTab({ currentUserId }) {
+  const [filter,   setFilter]   = useState("all");
+  const [posts,    setPosts]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    loadFeed(currentUserId, filter).then(p => { setPosts(p); setLoading(false); });
+  }, [currentUserId, filter]);
+
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
+      {/* Sticky header */}
       <div style={{ padding: "20px 20px 0", background: "#FDFAF7", position: "sticky", top: 0, zIndex: 5, borderBottom: "1px solid #EDE9E3" }}>
-        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>cabinet<span style={{ fontStyle: "italic", color: "#C8B8A2" }}>.</span></div>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 14 }}>
-          {["All", ...CATEGORIES.map(c => c.label)].map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "#1A1A1A" : "transparent", border: `1.5px solid ${filter === f ? "#1A1A1A" : "#DDD"}`, borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: filter === f ? "#FFF" : "#888", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s" }}>{f}</button>
-          ))}
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>
+          cabinet<span style={{ fontStyle: "italic", color: "#C8B8A2" }}>.</span>
         </div>
+        <PillScrollRow fadeColor="#FDFAF7">
+          {[{ id: "all", label: "All" }, ...CATEGORIES.map(c => ({ id: c.id, label: c.label }))].map(f => (
+            <button key={f.id} onClick={() => { setFilter(f.id); setLoading(true); }} style={{ background: filter === f.id ? "#1A1A1A" : "transparent", border: `1.5px solid ${filter === f.id ? "#1A1A1A" : "#DDD"}`, borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: filter === f.id ? "#FFF" : "#888", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.2s", marginBottom: 14 }}>{f.label}</button>
+          ))}
+        </PillScrollRow>
       </div>
+
       <div style={{ padding: "14px 16px 0" }}>
-        {filtered.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px 0", color: "#CCC" }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>✦</div>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18 }}>Nothing here yet</div>
-          </div>
-        ) : filtered.map((post, i) => <FeedPostCard key={post.id} post={post} index={i} />)}
+        {loading ? (
+          // Skeleton cards while loading
+          [1,2,3].map(i => (
+            <div key={i} style={{ background: "#FFF", borderRadius: 20, border: "1.5px solid #EDE9E3", padding: 18, marginBottom: 12 }}>
+              <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                <div className="skeleton" style={{ width: 40, height: 40, borderRadius: "50%" }} />
+                <div style={{ flex: 1 }}>
+                  <div className="skeleton" style={{ height: 13, width: "50%", marginBottom: 6 }} />
+                  <div className="skeleton" style={{ height: 11, width: "35%" }} />
+                </div>
+              </div>
+              <div className="skeleton" style={{ height: 90, borderRadius: 12 }} />
+            </div>
+          ))
+        ) : posts.length === 0 ? (
+          <FeedEmptyState />
+        ) : (
+          posts.map((post, i) => <FeedPostCard key={post.id} post={post} index={i} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Feed data fetcher ─────────────────────────────────────────────────────────
+// Phase 0: global feed — most recent cabinet additions across all users.
+// Phase 1: will filter to followed users first, backfill with global.
+// Joined: user_products → profiles (poster) + products → product_lines → brands.
+
+async function loadFeed(userId, categoryFilter = "all") {
+  let query = supabase
+    .from("user_products")
+    .select(`
+      id,
+      created_at,
+      status,
+      profiles ( id, username, display_name, avatar_url ),
+      products (
+        id, name, price_usd, image_url,
+        product_lines ( name, category, brands ( name ) )
+      )
+    `)
+    .is("deleted_at", null)
+    .neq("user_id", userId)          // don't show your own additions
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  const { data, error } = await query;
+  if (error) { console.warn("[loadFeed] error:", error.message); return []; }
+
+  // Normalize and deduplicate by (user_id + product_id)
+  const seen = new Set();
+  const posts = [];
+  for (const row of (data || [])) {
+    if (!row.profiles || !row.products) continue;
+    const key = `${row.profiles.id}-${row.products.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const pl     = row.products.product_lines;
+    const cat    = pl?.category || "skincare";
+    if (categoryFilter !== "all" && cat !== categoryFilter) continue;
+
+    const name   = row.profiles.display_name || row.profiles.username || "cabinet. user";
+    const handle = row.profiles.username ? "@" + row.profiles.username : "@user";
+    const initials = name.split(/[\s._-]/).map(n => n[0]).filter(Boolean).join("").slice(0,2).toUpperCase() || "CB";
+
+    posts.push({
+      id:          row.id,
+      user:        name,
+      handle,
+      initials,
+      avatarUrl:   row.profiles.avatar_url || null,
+      avatarColor: stringToColor(row.profiles.id),
+      time:        timeAgo(row.created_at),
+      product: {
+        id:       row.products.id,
+        name:     pl?.name || row.products.name,
+        brand:    pl?.brands?.name || "",
+        category: cat,
+        price:    row.products.price_usd ? `$${row.products.price_usd}` : "",
+        emoji:    categoryEmoji(cat),
+        color:    categoryColor(cat),
+      },
+      likes: 0,
+    });
+
+    if (posts.length >= 20) break;
+  }
+  return posts;
+}
+
+// Deterministic color from a UUID string — consistent avatar bg per user
+function stringToColor(str = "") {
+  const PALETTE = ["#D4A5A5","#A5C8B8","#B8A5C8","#C8B8A2","#A5B8C8","#C8A5B8","#A8C8A5","#C8C4A5"];
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return PALETTE[Math.abs(hash) % PALETTE.length];
+}
+
+// Human-readable relative time
+function timeAgo(iso) {
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 60)   return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+// Empty state — different message depending on follow state
+function FeedEmptyState() {
+  return (
+    <div style={{ textAlign: "center", padding: "64px 24px 0" }}>
+      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 36, color: "#E8E2D9", marginBottom: 16 }}>✦</div>
+      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: "#1A1A1A", marginBottom: 8 }}>
+        Your feed is quiet
+      </div>
+      <div style={{ fontSize: 13, color: "#AAA", lineHeight: 1.7, maxWidth: 260, margin: "0 auto" }}>
+        When people add products to their cabinets, you'll see them here. Discover people to follow in the Discover tab.
       </div>
     </div>
   );
@@ -1215,10 +1339,10 @@ function DiscoverTab({ myProducts = [], onAddProduct }) {
 
         {query.length > 0 && (
           !hasResults && !searching ? (
-            <div style={{ textAlign: "center", padding: "56px 0", color: "#CCC" }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>✦</div>
-              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: "#BBB", marginBottom: 6 }}>No results for "{query}"</div>
-              <div style={{ fontSize: 13, color: "#CCC" }}>Try a product name, brand, skin concern, or @handle</div>
+            <div style={{ textAlign: "center", padding: "56px 24px 0" }}>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 36, color: "#E8E2D9", marginBottom: 12 }}>✦</div>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: "#1A1A1A", marginBottom: 8 }}>Nothing found for "{query}"</div>
+              <div style={{ fontSize: 13, color: "#AAA", lineHeight: 1.7 }}>Try a product name, brand, or @handle.<br/>Our catalog is growing — check back soon.</div>
             </div>
           ) : (
             <div>
@@ -1967,7 +2091,7 @@ export default function App() {
   if (!authedUser) return shell(<AuthGate onAuthenticated={handleAuthenticated} />);
 
   return shell(<>
-    {activeTab === "feed"     && <FeedTab />}
+    {activeTab === "feed"     && <FeedTab currentUserId={authedUser?.id} />}
     {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} />}
     {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onRepurchaseChange={handleRepurchaseChange} onSignOut={handleSignOut} onUpdateUser={u => setAuthedUser(u)} loading={loadingCabinet} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
