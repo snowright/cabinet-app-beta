@@ -783,19 +783,45 @@ function EditProfileModal({ user, onClose, onUpdate }) {
     setSaving(true);
     const finalCabinetName = cabinetName.trim() || `${displayName.trim().split(" ")[0]}'s Cabinet`;
     if (user?.id) {
-      await supabase.from("profiles").update({
-        display_name:   displayName.trim(),
-        username:       username.trim(),
-        bio:            bio.trim() || null,
-        cabinet_name:   finalCabinetName,
-        skin_type:      skinType || null,
-        skin_concerns:  skinConcerns,
-        hair_type:      hairType || null,
-        avatar_url:     avatarUrl,
+      const { error } = await supabase.from("profiles").update({
+        display_name:  displayName.trim(),
+        username:      username.trim(),
+        bio:           bio.trim() || null,
+        cabinet_name:  finalCabinetName,
+        skin_type:     skinType || null,
+        skin_concerns: skinConcerns,
+        hair_type:     hairType || null,
+        avatar_url:    avatarUrl,
       }).eq("id", user.id);
+
+      if (error) {
+        console.warn("[EditProfile] save error:", error.message);
+        setErrors({ displayName: "Save failed — " + error.message });
+        setSaving(false);
+        return;
+      }
+
+      // Re-read from DB to confirm write succeeded and surface the true stored values
+      const { data: fresh } = await supabase.from("profiles")
+        .select("display_name, username, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      setSaving(false);
+      onUpdate({
+        ...user,
+        name:         fresh?.display_name  || displayName.trim(),
+        handle:       fresh?.username      ? "@" + fresh.username : "@" + username.trim(),
+        cabinetName:  fresh?.cabinet_name  || finalCabinetName,
+        bio:          fresh?.bio           || null,
+        skinType:     fresh?.skin_type     || null,
+        skinConcerns: fresh?.skin_concerns || [],
+        hairType:     fresh?.hair_type     || null,
+        avatarUrl:    fresh?.avatar_url    || avatarUrl,
+      });
+    } else {
+      setSaving(false);
     }
-    setSaving(false);
-    onUpdate({ ...user, name: displayName.trim(), handle: "@" + username.trim(), cabinetName: finalCabinetName, bio: bio.trim() || null, skinType: skinType || null, skinConcerns, hairType: hairType || null, avatarUrl });
     onClose();
   };
 
@@ -1784,7 +1810,9 @@ function AuthGate({ onAuthenticated }) {
   useEffect(() => {
     // onAuthStateChange fires after the JWT is verified — safer than getSession
     // which can fire before the session is ready, causing profile reads to fail silently.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // getSession handles the initial load — it reads from local storage immediately
+    // so the splash never hangs. onAuthStateChange then keeps the session live.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { setChecking(false); return; }
 
       const { data: profile, error } = await supabase.from("profiles")
@@ -1813,9 +1841,6 @@ function AuthGate({ onAuthenticated }) {
         role:         profile?.role || "user",
       });
     });
-
-    // Unsubscribe when AuthGate unmounts
-    return () => subscription.unsubscribe();
   }, []);
 
   if (checking) return (
