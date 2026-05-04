@@ -161,8 +161,9 @@ function useProductSearch(query) {
             ? `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
             : `name.ilike.%${q}%,description.ilike.%${q}%`)
           .limit(12),
-        supabase.from("product_lines").select(baseSelect)
-          .ilike("search_tags::text", `%${q}%`).limit(12),
+        // search_tags query re-enable after: ALTER TABLE product_lines ADD COLUMN search_tags TEXT;
+        // supabase.from("product_lines").select(baseSelect)
+        //   .ilike("search_tags::text", `%${q}%`).limit(12),
         ...((isBlackOwned || isIndie) && brandIds.length > 0
           ? [supabase.from("product_lines").select(baseSelect).in("brand_id", brandIds).limit(20)]
           : []),
@@ -2133,19 +2134,26 @@ export default function App() {
     // Optimistic local update first so UI feels instant
     setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, { ...product, status: "using", addedAt: new Date().toISOString() }]);
 
-    if (authedUser?.id && product.id) {
-      const { data, error } = await supabase
-        .from("user_products")
-        .insert({ user_id: authedUser.id, product_id: product.id, status: "using" })
-        .select("id")
-        .single();
+    if (!authedUser?.id || !product.id) return;
 
-      if (error) {
-        console.warn("[handleAddProduct] insert error:", error.message);
-      } else if (data?.id) {
-        // Stamp user_product_id onto the local record so repurchase updates target the right row
-        setMyProducts(prev => prev.map(p => p.id === product.id ? { ...p, user_product_id: data.id } : p));
-      }
+    // Guard: mock products use integer IDs — only write to DB when we have a real UUID
+    const isUUID = typeof product.id === "string" && /^[0-9a-f-]{36}$/.test(product.id);
+    if (!isUUID) {
+      console.info("[handleAddProduct] skipping DB write — mock product id:", product.id);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("user_products")
+      .insert({ user_id: authedUser.id, product_id: product.id, status: "using" })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.warn("[handleAddProduct] insert error:", error.message);
+    } else if (data?.id) {
+      // Stamp user_product_id so repurchase/remove updates target the right row
+      setMyProducts(prev => prev.map(p => p.id === product.id ? { ...p, user_product_id: data.id } : p));
     }
   };
 
