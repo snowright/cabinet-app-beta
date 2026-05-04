@@ -43,6 +43,11 @@ const GlobalStyles = () => (
     input:focus { outline: none; }
     textarea:focus { outline: none; }
     button { font-family: 'Jost', sans-serif; cursor: pointer; }
+
+    /* Pill scroll — no visible scrollbar, fade-right peek signals more content */
+    .pill-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-right: 40px; }
+    .pill-row::-webkit-scrollbar { display: none; }
+    .pill-scroll-wrap { position: relative; overflow: hidden; }
   `}</style>
 );
 
@@ -202,16 +207,11 @@ function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, overflowY: "auto", position: "relative" }}>
-        {/* Sticky header: decorative pill (no drag logic) + × close button */}
+        {/* Sticky header: decorative pill + × button */}
         <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
           <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-          >✕</button>
+          <button onClick={onClose} aria-label="Close" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
         </div>
-        {/* Sheet content */}
         <div style={{ padding }}>
           {children}
         </div>
@@ -669,25 +669,232 @@ function FeedPostCard({ post, index }) {
   );
 }
 
+// ─── AVATAR ──────────────────────────────────────────────────────────────────
+// Renders a real image if avatarUrl exists, otherwise initials fallback.
+
+function Avatar({ avatarUrl, initials, size = 60 }) {
+  const [imgError, setImgError] = useState(false);
+  const showImg = avatarUrl && !imgError;
+  return (
+    <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, overflow: "hidden", background: "linear-gradient(135deg, #D4A5A5, #A5B8C8)", border: "2px solid #E8D5BC", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {showImg
+        ? <img src={avatarUrl} alt="Profile" onError={() => setImgError(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        : <span style={{ fontFamily: "'DM Mono', monospace", fontSize: size * 0.33, fontWeight: 700, color: "#FFF" }}>{initials}</span>
+      }
+    </div>
+  );
+}
+
+// ─── PILL SCROLL ROW ─────────────────────────────────────────────────────────
+// Hides the scrollbar; right-edge fade signals there's more to scroll.
+// fadeColor must match the exact background behind the row.
+
+function PillScrollRow({ children, fadeColor = "#FDFAF7" }) {
+  return (
+    <div className="pill-scroll-wrap">
+      <div className="pill-row">{children}</div>
+      <div style={{ position: "absolute", top: 0, right: 0, width: 44, height: "100%", background: `linear-gradient(to right, transparent, ${fadeColor})`, pointerEvents: "none" }} />
+    </div>
+  );
+}
+
+// ─── BEAUTY DNA PILLS ────────────────────────────────────────────────────────
+
+const DNA_PILL_STYLES = {
+  skinType:     { bg: "#FBF6F0", border: "#E8D5BC", color: "#8B6F47" },
+  hairType:     { bg: "#F2F8F4", border: "#C0DBC8", color: "#4A7C59" },
+  skinConcern:  { bg: "#FDF2F0", border: "#F5C6C0", color: "#C0392B" },
+};
+
+function BeautyDNA({ skinType, skinConcerns = [], hairType }) {
+  const hasDNA = skinType || hairType || skinConcerns.length > 0;
+  if (!hasDNA) return null;
+  const s = DNA_PILL_STYLES;
+  return (
+    <div style={{ background: "#F5F1EC", borderRadius: 12, padding: "10px 12px", marginBottom: 12 }}>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: "#AAA", marginBottom: 7 }}>Beauty DNA</div>
+      <PillScrollRow fadeColor="#F5F1EC">
+        {skinType && <span style={{ ...dnaPill(s.skinType) }}>✦ {skinType}</span>}
+        {hairType && <span style={{ ...dnaPill(s.hairType) }}>◉ {hairType}</span>}
+        {skinConcerns.map((c, i) => <span key={i} style={{ ...dnaPill(s.skinConcern) }}>◈ {c}</span>)}
+      </PillScrollRow>
+    </div>
+  );
+}
+
+function dnaPill({ bg, border, color }) {
+  return { display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 20, fontSize: 10, fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em", whiteSpace: "nowrap", flexShrink: 0, background: bg, border: `1px solid ${border}`, color };
+}
+
+// ─── EDIT PROFILE MODAL ──────────────────────────────────────────────────────
+// Handles: avatar upload → Supabase Storage, then writes public URL to profiles.
+// Bio capped at 120 chars. Skin concerns multi-select (max 3). All saves via upsert.
+
+const SKIN_TYPES   = ["Normal", "Dry", "Oily", "Combination", "Sensitive"];
+const HAIR_TYPES   = ["Fine / Straight", "Wavy", "Curly (3a–3c)", "Coily (4a–4c)", "Color-treated", "Natural / Protective styles"];
+const SKIN_CONCERN_OPTIONS = ["Acne", "Dryness", "Hyperpigmentation", "Fine lines", "Redness", "Sensitivity", "Uneven texture", "Pores"];
+
+function EditProfileModal({ user, onClose, onUpdate }) {
+  const [displayName,   setDisplayName]   = useState(user?.name?.includes("@") ? user.name.split("@")[0] : user?.name || "");
+  const [username,      setUsername]      = useState((user?.handle || "").replace("@", ""));
+  const [cabinetName,   setCabinetName]   = useState(user?.cabinetName || "");
+  const [bio,           setBio]           = useState(user?.bio || "");
+  const [skinType,      setSkinType]      = useState(user?.skinType || "");
+  const [hairType,      setHairType]      = useState(user?.hairType || "");
+  const [skinConcerns,  setSkinConcerns]  = useState(user?.skinConcerns || []);
+  const [avatarUrl,     setAvatarUrl]     = useState(user?.avatarUrl || null);
+  const [uploading,     setUploading]     = useState(false);
+  const [saving,        setSaving]        = useState(false);
+  const [errors,        setErrors]        = useState({});
+  const fileRef = useRef(null);
+
+  const BIO_MAX = 120;
+
+  const toggleConcern = (concern) => {
+    setSkinConcerns(prev =>
+      prev.includes(concern) ? prev.filter(c => c !== concern)
+      : prev.length < 3 ? [...prev, concern] : prev
+    );
+  };
+
+  const handleAvatarPick = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+    if (file.size > 2 * 1024 * 1024) { setErrors(p => ({ ...p, avatar: "Max 2MB" })); return; }
+    setUploading(true);
+    setErrors(p => ({ ...p, avatar: null }));
+    // Upload to Supabase Storage bucket "avatars", named by user UUID (overwrites on update)
+    const { error: uploadError } = await supabase.storage.from("avatars").upload(user.id, file, { upsert: true, contentType: file.type });
+    if (uploadError) { setErrors(p => ({ ...p, avatar: "Upload failed — try again" })); setUploading(false); return; }
+    // Get the public URL
+    const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(user.id);
+    // Bust cache by appending a timestamp so the browser reloads the new image
+    setAvatarUrl(publicUrl + "?t=" + Date.now());
+    setUploading(false);
+  };
+
+  const save = async () => {
+    const e = {};
+    if (!displayName.trim()) e.displayName = "Name is required";
+    if (!username.trim()) e.username = "Handle is required";
+    else if (!/^[a-z0-9_]+$/.test(username)) e.username = "Lowercase, numbers, underscores only";
+    if (bio.length > BIO_MAX) e.bio = `${bio.length - BIO_MAX} chars over limit`;
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setSaving(true);
+    const finalCabinetName = cabinetName.trim() || `${displayName.trim().split(" ")[0]}'s Cabinet`;
+    if (user?.id) {
+      await supabase.from("profiles").update({
+        display_name:   displayName.trim(),
+        username:       username.trim(),
+        bio:            bio.trim() || null,
+        cabinet_name:   finalCabinetName,
+        skin_type:      skinType || null,
+        skin_concerns:  skinConcerns,
+        hair_type:      hairType || null,
+        avatar_url:     avatarUrl,
+      }).eq("id", user.id);
+    }
+    setSaving(false);
+    onUpdate({ ...user, name: displayName.trim(), handle: "@" + username.trim(), cabinetName: finalCabinetName, bio: bio.trim() || null, skinType: skinType || null, skinConcerns, hairType: hairType || null, avatarUrl });
+    onClose();
+  };
+
+  const initials = displayName.split(/[\s._-]/).map(n => n[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "ME";
+  const fieldLabel = (text) => <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: "#AAA", marginBottom: 6 }}>{text}</div>;
+  const fieldInput = (props) => <input {...props} style={{ width: "100%", padding: "11px 13px", background: "#FFF", border: `1.5px solid ${errors[props.name] ? "#E07070" : "#E5E0D8"}`, borderRadius: 10, fontSize: 13, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", boxSizing: "border-box", ...(props.style || {}) }} onFocus={e => e.target.style.borderColor = "#C8B8A2"} onBlur={e => e.target.style.borderColor = errors[props.name] ? "#E07070" : "#E5E0D8"} />;
+  const errMsg = (key) => errors[key] ? <div style={{ fontSize: 11, color: "#E07070", marginTop: 4, fontFamily: "'DM Mono', monospace" }}>{errors[key]}</div> : null;
+
+  return (
+    <BottomSheet onClose={onClose} maxHeight="92vh" padding="16px 20px 48px">
+      {/* Avatar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20, paddingBottom: 20, borderBottom: "0.5px solid #EDE9E3" }}>
+        <div style={{ position: "relative", cursor: "pointer" }} onClick={() => fileRef.current?.click()}>
+          <Avatar avatarUrl={avatarUrl} initials={initials} size={64} />
+          <div style={{ position: "absolute", bottom: 0, right: 0, width: 22, height: 22, background: uploading ? "#AAA" : "#1A1A1A", borderRadius: "50%", border: "2px solid #FDFAF7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#FFF" }}>
+            {uploading ? <span style={{ width: 10, height: 10, border: "1.5px solid rgba(255,255,255,0.3)", borderTopColor: "#FFF", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} /> : "✎"}
+          </div>
+        </div>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={handleAvatarPick} />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: "#1A1A1A", marginBottom: 3 }}>Profile photo</div>
+          <div style={{ fontSize: 11, color: "#AAA", lineHeight: 1.5 }}>JPG, PNG or WebP · Max 2MB</div>
+          {errMsg("avatar")}
+        </div>
+      </div>
+
+      {/* Name + Handle + Cabinet name */}
+      <div style={{ marginBottom: 14 }}>{fieldLabel("Full name")}{fieldInput({ name: "displayName", value: displayName, onChange: e => setDisplayName(e.target.value), placeholder: "Your name" })}{errMsg("displayName")}</div>
+      <div style={{ marginBottom: 14 }}>
+        {fieldLabel("Handle")}
+        <div style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#C8B8A2", fontWeight: 600, fontSize: 14 }}>@</span>
+          {fieldInput({ name: "username", value: username, onChange: e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")), placeholder: "yourhandle", style: { paddingLeft: 28 } })}
+        </div>
+        {errMsg("username")}
+      </div>
+      <div style={{ marginBottom: 14 }}>{fieldLabel("Cabinet name")}{fieldInput({ name: "cabinetName", value: cabinetName, onChange: e => setCabinetName(e.target.value), placeholder: `${displayName.split(" ")[0] || "My"}'s Cabinet`, maxLength: 40, style: { fontFamily: "'Cormorant Garamond', serif", fontSize: 15 } })}</div>
+
+      {/* Bio */}
+      <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: "0.5px solid #EDE9E3" }}>
+        {fieldLabel(`Bio · ${bio.length} / ${BIO_MAX}`)}
+        <textarea value={bio} onChange={e => setBio(e.target.value.slice(0, BIO_MAX))} placeholder="Skincare minimalist. Fragrance maximalist…" rows={3} style={{ width: "100%", padding: "11px 13px", background: "#FFF", border: `1.5px solid ${errors.bio ? "#E07070" : "#E5E0D8"}`, borderRadius: 10, fontSize: 13, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", lineHeight: 1.6, resize: "none", boxSizing: "border-box" }} onFocus={e => e.target.style.borderColor = "#C8B8A2"} onBlur={e => e.target.style.borderColor = "#E5E0D8"} />
+        {errMsg("bio")}
+      </div>
+
+      {/* Beauty DNA */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#888", marginBottom: 14 }}>Beauty DNA</div>
+        <div style={{ marginBottom: 12 }}>
+          {fieldLabel("Skin type")}
+          <select value={skinType} onChange={e => setSkinType(e.target.value)} style={{ width: "100%", padding: "11px 13px", background: "#FFF", border: "1.5px solid #E5E0D8", borderRadius: 10, fontSize: 13, color: skinType ? "#1A1A1A" : "#AAA", fontFamily: "'Jost', sans-serif", appearance: "none" }}>
+            <option value="">Select skin type…</option>
+            {SKIN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          {fieldLabel("Skin concerns · pick up to 3")}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {SKIN_CONCERN_OPTIONS.map(c => {
+              const active = skinConcerns.includes(c);
+              return <button key={c} onClick={() => toggleConcern(c)} style={{ padding: "5px 12px", borderRadius: 20, fontSize: 10, fontFamily: "'DM Mono', monospace", border: "1.5px solid", background: active ? "#1A1A1A" : "transparent", color: active ? "#FFF" : "#888", borderColor: active ? "#1A1A1A" : "#E5E0D8", cursor: "pointer", transition: "all 0.15s" }}>{c}</button>;
+            })}
+          </div>
+        </div>
+        <div>
+          {fieldLabel("Hair type")}
+          <select value={hairType} onChange={e => setHairType(e.target.value)} style={{ width: "100%", padding: "11px 13px", background: "#FFF", border: "1.5px solid #E5E0D8", borderRadius: 10, fontSize: 13, color: hairType ? "#1A1A1A" : "#AAA", fontFamily: "'Jost', sans-serif", appearance: "none" }}>
+            <option value="">Select hair type…</option>
+            {HAIR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <button onClick={save} disabled={saving} style={{ width: "100%", padding: "14px", background: saving ? "#C8BFB5" : "#1A1A1A", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, color: "#FFF", cursor: saving ? "default" : "pointer", fontFamily: "'Jost', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        {saving ? <span style={{ width: 16, height: 16, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#FFF", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} /> : "Save changes"}
+      </button>
+    </BottomSheet>
+  );
+}
+
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRepurchaseChange, onSignOut, loading }) {
-  const [showThemePicker, setShowThemePicker] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [showAddModal, setShowAddModal]       = useState(false);
-  const [showSettings, setShowSettings]       = useState(false);
-  const [signingOut, setSigningOut]           = useState(false);
-  const [activeFilter, setActiveFilter]       = useState("all");
-  const [toast, setToast]                     = useState(null);
+function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRepurchaseChange, onSignOut, onUpdateUser, loading }) {
+  const [showThemePicker,  setShowThemePicker]  = useState(false);
+  const [showEditProfile,  setShowEditProfile]  = useState(false);
+  const [selectedProduct,  setSelectedProduct]  = useState(null);
+  const [showSettings,     setShowSettings]     = useState(false);
+  const [signingOut,       setSigningOut]       = useState(false);
+  const [activeFilter,     setActiveFilter]     = useState("all");
+  const [toast,            setToast]            = useState(null);
   const undoRef = useRef(null);
 
-  // If profile.display_name was never set, user.name falls back to the raw email.
-  // Strip the @domain so it reads like a name hint rather than an email address.
+  // Clean identity — never render a raw email as a display name
   const rawName     = user?.name || "";
   const displayName = rawName.includes("@") ? rawName.split("@")[0] : rawName || "User";
   const handle      = user?.handle || "@user";
   const cabinetName = user?.cabinetName || `${displayName.split(" ")[0]}'s Cabinet`;
   const initials    = displayName.split(/[\s._-]/).map(n => n[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "ME";
+  const isBeta      = user?.role === "beta" || user?.role === "admin";
   const activeProducts = products.filter(p => p.status !== "not_repurchase");
 
   const handleSignOut = async () => { setSigningOut(true); await supabase.auth.signOut(); onSignOut(); };
@@ -714,39 +921,73 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
-      <div style={{ padding: "20px 20px 16px", background: "#FDFAF7" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
-          <div style={{ width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg, #D4A5A5, #A5B8C8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>{initials}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: "#1A1A1A" }}>{cabinetName}</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "#1A1A1A", marginBottom: 1 }}>{displayName}</div>
-            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{handle} · {activeProducts.length} products</div>
+      <div style={{ padding: "20px 20px 14px", background: "#FDFAF7" }}>
+
+        {/* ── Avatar + identity ── */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <Avatar avatarUrl={user?.avatarUrl} initials={initials} size={60} />
+            <div onClick={() => setShowEditProfile(true)} style={{ position: "absolute", bottom: 0, right: 0, width: 20, height: 20, background: "#1A1A1A", borderRadius: "50%", border: "2px solid #FDFAF7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#FFF", cursor: "pointer" }}>✎</div>
           </div>
-          <button onClick={() => setShowSettings(s => !s)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 10, width: 36, height: 36, fontSize: 16, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>⚙</button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.15 }}>{cabinetName}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "#555", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayName}</div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#AAA", marginTop: 1 }}>{handle}</div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button onClick={() => setShowEditProfile(true)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: "#888", fontFamily: "'Jost', sans-serif" }}>Edit</button>
+            <button onClick={() => setShowSettings(s => !s)} style={{ background: "#F0EDE8", border: "1.5px solid #E5E0D8", borderRadius: 8, width: 32, height: 30, fontSize: 15, color: "#888", display: "flex", alignItems: "center", justifyContent: "center" }}>⚙</button>
+          </div>
         </div>
 
+        {/* ── Bio ── */}
+        {user?.bio ? (
+          <p style={{ fontSize: 12, color: "#666", lineHeight: 1.65, fontStyle: "italic", margin: "0 0 12px", paddingBottom: 12, borderBottom: "0.5px solid #EDE9E3" }}>"{user.bio}"</p>
+        ) : null}
+
+        {/* ── Stats ── */}
+        <div style={{ display: "flex", gap: 20, marginBottom: 12 }}>
+          <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{activeProducts.length}</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>products</div></div>
+          <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>0</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>followers</div></div>
+          <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>0</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>following</div></div>
+        </div>
+
+        {/* ── Beauty DNA (from profile) ── */}
+        <BeautyDNA skinType={user?.skinType} skinConcerns={user?.skinConcerns} hairType={user?.hairType} />
+
+        {/* ── Beta badge ── */}
+        {isBeta && (
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 20, fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.08em", background: "#1A1A1A", color: "#C8B8A2" }}>◈ BETA MEMBER</span>
+          </div>
+        )}
+
+        {/* ── Settings drawer ── */}
         {showSettings && (
-          <div style={{ background: "#FFF", border: "1.5px solid #EDE9E3", borderRadius: 14, padding: "14px 16px", marginBottom: 16, animation: "fadeUp 0.2s ease" }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", marginBottom: 12 }}>SETTINGS</div>
-            <button onClick={() => setShowThemePicker(true)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #F0EDE8", color: "#1A1A1A", fontSize: 14, textAlign: "left" }}>
-              <span style={{ fontSize: 18 }}>{theme.emoji}</span><span style={{ flex: 1 }}>Cabinet Style</span><span style={{ fontSize: 12, color: "#AAA" }}>→</span>
+          <div style={{ background: "#FFF", border: "1.5px solid #EDE9E3", borderRadius: 12, padding: "12px 14px", marginBottom: 12, animation: "fadeUp 0.2s ease" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#BBB", letterSpacing: "0.1em", marginBottom: 10, textTransform: "uppercase" }}>Settings</div>
+            <button onClick={() => setShowThemePicker(true)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "none", border: "none", borderBottom: "0.5px solid #F0EDE8", color: "#1A1A1A", fontSize: 13, textAlign: "left" }}>
+              <span style={{ fontSize: 16 }}>{theme.emoji}</span><span style={{ flex: 1 }}>Cabinet Style</span><span style={{ fontSize: 12, color: "#AAA" }}>→</span>
             </button>
-            <button onClick={handleSignOut} disabled={signingOut} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 0", background: "none", border: "none", color: "#E07070", fontSize: 14, textAlign: "left", cursor: signingOut ? "default" : "pointer" }}>
-              <span style={{ fontSize: 18 }}>↪</span><span>{signingOut ? "Signing out…" : "Sign Out"}</span>
+            <button onClick={handleSignOut} disabled={signingOut} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "none", border: "none", color: "#E07070", fontSize: 13, textAlign: "left", cursor: signingOut ? "default" : "pointer" }}>
+              <span style={{ fontSize: 16 }}>↪</span><span>{signingOut ? "Signing out…" : "Sign Out"}</span>
             </button>
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+        {/* ── Category filter pills with fade scroll ── */}
+        <PillScrollRow fadeColor="#FDFAF7">
           {[{ id: "all", label: `All · ${activeProducts.length}` }, ...CATEGORIES.map(cat => {
             const count = activeProducts.filter(p => p.category === cat.id).length;
             if (!count && activeFilter !== cat.id) return null;
             return { id: cat.id, label: `${cat.label} · ${count}` };
           }).filter(Boolean)].map(f => (
-            <button key={f.id} onClick={() => setActiveFilter(f.id)} style={{ background: activeFilter === f.id ? "#1A1A1A" : "transparent", border: `1.5px solid ${activeFilter === f.id ? "#1A1A1A" : "#E5E0D8"}`, borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 500, color: activeFilter === f.id ? "#FFF" : "#888", whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0, cursor: "pointer", transition: "all 0.2s" }}>{f.label}</button>
+            <button key={f.id} onClick={() => setActiveFilter(f.id)} style={{ background: activeFilter === f.id ? "#1A1A1A" : "transparent", border: `1.5px solid ${activeFilter === f.id ? "#1A1A1A" : "#E5E0D8"}`, borderRadius: 20, padding: "5px 12px", fontSize: 10, fontWeight: 500, color: activeFilter === f.id ? "#FFF" : "#888", whiteSpace: "nowrap", fontFamily: "'DM Mono', monospace", flexShrink: 0, cursor: "pointer", transition: "all 0.2s" }}>{f.label}</button>
           ))}
-        </div>
+        </PillScrollRow>
       </div>
+
+      <div style={{ height: "0.5px", background: "#EDE9E3" }} />
 
       <div style={{ paddingTop: 12 }}>
         <CabinetGrid products={products} onProductClick={setSelectedProduct} isOwn={true} activeFilter={activeFilter} />
@@ -756,13 +997,13 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
         <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", maxWidth: 440, width: "calc(100% - 32px)", background: "#1A140F", borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, zIndex: 60, animation: "fadeUp 0.25s ease", boxShadow: "0 8px 24px rgba(0,0,0,0.25)" }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#7EC8A0" strokeWidth="1.2"/><path d="M5 8L7 10L11 6" stroke="#7EC8A0" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span style={{ flex: 1, fontSize: 13, color: "#FDFAF7" }}>{toast.product?.name || "Product"} removed</span>
-          <button onClick={handleUndo} style={{ background: "none", border: "none", color: "#C8B8A2", fontSize: 12, fontFamily: "'DM Mono', monospace", cursor: "pointer", padding: "2px 4px", letterSpacing: "0.04em" }}>Undo</button>
+          <button onClick={handleUndo} style={{ background: "none", border: "none", color: "#C8B8A2", fontSize: 12, fontFamily: "'DM Mono', monospace", cursor: "pointer", padding: "2px 4px" }}>Undo</button>
         </div>
       )}
 
-      {showThemePicker  && <ThemePicker current={theme} onSelect={onThemeChange} onClose={() => setShowThemePicker(false)} />}
+      {showThemePicker && <ThemePicker current={theme} onSelect={onThemeChange} onClose={() => setShowThemePicker(false)} />}
+      {showEditProfile  && <EditProfileModal user={user} onClose={() => setShowEditProfile(false)} onUpdate={onUpdateUser} />}
       {selectedProduct  && <ProductDetailModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} onRepurchaseChange={handleRepurchase} isOwn={true} />}
-      {showAddModal     && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={onAddProduct} />}
     </div>
   );
 }
@@ -1341,20 +1582,23 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         setErrors({ password: error.message.includes("Invalid login credentials") ? "Incorrect email or password" : error.message.includes("Email not confirmed") ? "Please verify your email first — check your inbox" : error.message });
         setLoading(false); return;
       }
-      const { data: profile } = await supabase.from("profiles").select("display_name, username, cabinet_name, cabinet_theme")
+      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, cabinet_theme, role")
         .eq("id", data.user.id)
         .maybeSingle();
-      const savedTheme = profile?.cabinet_theme
-        ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
-        : null;
+      const savedTheme = profile?.cabinet_theme ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null : null;
       setLoading(false);
       onSuccess({
-        id:          data.user.id,
-        email:       data.user.email,
-        name:        profile?.display_name || data.user.email,
-        handle:      profile?.username ? "@" + profile.username : "@" + data.user.email.split("@")[0],
+        id: data.user.id, email: data.user.email,
+        name: profile?.display_name || data.user.email,
+        handle: profile?.username ? "@" + profile.username : "@" + data.user.email.split("@")[0],
+        avatarUrl: profile?.avatar_url || null,
+        bio: profile?.bio || null,
+        skinType: profile?.skin_type || null,
+        skinConcerns: profile?.skin_concerns || [],
+        hairType: profile?.hair_type || null,
         cabinetName: profile?.cabinet_name || null,
         cabinetTheme: savedTheme,
+        role: profile?.role || "user",
       });
     } catch (err) {
       setErrors({ password: "Something went wrong. Please try again." });
@@ -1540,24 +1784,25 @@ function AuthGate({ onAuthenticated }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user) { setChecking(false); return; }
-
-      // maybeSingle() returns null (not an error) when no row exists — safer than single()
       supabase.from("profiles")
-        .select("display_name, username, cabinet_name, cabinet_theme")
+        .select("display_name, username, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, cabinet_theme, role")
         .eq("id", session.user.id)
         .maybeSingle()
         .then(({ data: profile, error }) => {
           if (error) console.warn("[AuthGate] profile fetch error:", error.message);
-          const savedTheme = profile?.cabinet_theme
-            ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
-            : null;
+          const savedTheme = profile?.cabinet_theme ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null : null;
           onAuthenticated({
-            id:          session.user.id,
-            email:       session.user.email,
-            name:        profile?.display_name || session.user.email,
-            handle:      profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
+            id: session.user.id, email: session.user.email,
+            name: profile?.display_name || session.user.email,
+            handle: profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
+            avatarUrl: profile?.avatar_url || null,
+            bio: profile?.bio || null,
+            skinType: profile?.skin_type || null,
+            skinConcerns: profile?.skin_concerns || [],
+            hairType: profile?.hair_type || null,
             cabinetName: profile?.cabinet_name || null,
             cabinetTheme: savedTheme,
+            role: profile?.role || "user",
           });
         });
     });
@@ -1647,7 +1892,7 @@ export default function App() {
   return shell(<>
     {activeTab === "feed"     && <FeedTab />}
     {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} />}
-    {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onRepurchaseChange={handleRepurchaseChange} onSignOut={handleSignOut} loading={loadingCabinet} />}
+    {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onRepurchaseChange={handleRepurchaseChange} onSignOut={handleSignOut} onUpdateUser={u => setAuthedUser(u)} loading={loadingCabinet} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
   </>);
