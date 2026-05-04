@@ -1341,10 +1341,21 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         setErrors({ password: error.message.includes("Invalid login credentials") ? "Incorrect email or password" : error.message.includes("Email not confirmed") ? "Please verify your email first — check your inbox" : error.message });
         setLoading(false); return;
       }
-      const { data: profile } = await supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name, cabinet_theme").eq("id", data.user.id).single();
-      const savedTheme = profile?.cabinet_theme ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null : null;
+      const { data: profile } = await supabase.from("profiles").select("display_name, username, cabinet_name, cabinet_theme")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      const savedTheme = profile?.cabinet_theme
+        ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
+        : null;
       setLoading(false);
-      onSuccess({ id: data.user.id, email: data.user.email, name: profile?.display_name || data.user.email, handle: profile?.username ? "@" + profile.username : "@" + data.user.email.split("@")[0], cabinetName: profile?.cabinet_name || null, cabinetTheme: savedTheme });
+      onSuccess({
+        id:          data.user.id,
+        email:       data.user.email,
+        name:        profile?.display_name || data.user.email,
+        handle:      profile?.username ? "@" + profile.username : "@" + data.user.email.split("@")[0],
+        cabinetName: profile?.cabinet_name || null,
+        cabinetTheme: savedTheme,
+      });
     } catch (err) {
       setErrors({ password: "Something went wrong. Please try again." });
       setLoading(false);
@@ -1528,13 +1539,27 @@ function AuthGate({ onAuthenticated }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        supabase.from("profiles").select("display_name, username, avatar_url, cabinet_name, cabinet_theme").eq("id", session.user.id).single()
-          .then(({ data: profile }) => {
-            const savedTheme = profile?.cabinet_theme ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null : null;
-            onAuthenticated({ id: session.user.id, email: session.user.email, name: profile?.display_name || session.user.email, handle: profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0], cabinetName: profile?.cabinet_name || null, cabinetTheme: savedTheme });
+      if (!session?.user) { setChecking(false); return; }
+
+      // maybeSingle() returns null (not an error) when no row exists — safer than single()
+      supabase.from("profiles")
+        .select("display_name, username, cabinet_name, cabinet_theme")
+        .eq("id", session.user.id)
+        .maybeSingle()
+        .then(({ data: profile, error }) => {
+          if (error) console.warn("[AuthGate] profile fetch error:", error.message);
+          const savedTheme = profile?.cabinet_theme
+            ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
+            : null;
+          onAuthenticated({
+            id:          session.user.id,
+            email:       session.user.email,
+            name:        profile?.display_name || session.user.email,
+            handle:      profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
+            cabinetName: profile?.cabinet_name || null,
+            cabinetTheme: savedTheme,
           });
-      } else { setChecking(false); }
+        });
     });
   }, []);
 
@@ -1565,7 +1590,7 @@ export default function App() {
 
   const loadCabinet = async (userId) => {
     setLoadingCabinet(true);
-    const { data: profile } = await supabase.from("profiles").select("cabinet_theme").eq("id", userId).single();
+    const { data: profile } = await supabase.from("profiles").select("cabinet_theme").eq("id", userId).maybeSingle();
     if (profile?.cabinet_theme) { const saved = CABINET_THEMES.find(t => t.id === profile.cabinet_theme); if (saved) setCabinetTheme(saved); }
 
     const { data: userProducts } = await supabase.from("user_products")
