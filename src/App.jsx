@@ -1782,30 +1782,40 @@ function AuthGate({ onAuthenticated }) {
   const [checking, setChecking]     = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // onAuthStateChange fires after the JWT is verified — safer than getSession
+    // which can fire before the session is ready, causing profile reads to fail silently.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!session?.user) { setChecking(false); return; }
-      supabase.from("profiles")
+
+      const { data: profile, error } = await supabase.from("profiles")
         .select("display_name, username, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, cabinet_theme, role")
         .eq("id", session.user.id)
-        .maybeSingle()
-        .then(({ data: profile, error }) => {
-          if (error) console.warn("[AuthGate] profile fetch error:", error.message);
-          const savedTheme = profile?.cabinet_theme ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null : null;
-          onAuthenticated({
-            id: session.user.id, email: session.user.email,
-            name: profile?.display_name || session.user.email,
-            handle: profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
-            avatarUrl: profile?.avatar_url || null,
-            bio: profile?.bio || null,
-            skinType: profile?.skin_type || null,
-            skinConcerns: profile?.skin_concerns || [],
-            hairType: profile?.hair_type || null,
-            cabinetName: profile?.cabinet_name || null,
-            cabinetTheme: savedTheme,
-            role: profile?.role || "user",
-          });
-        });
+        .maybeSingle();
+
+      if (error) console.warn("[AuthGate] profile fetch error:", error.message);
+
+      const savedTheme = profile?.cabinet_theme
+        ? CABINET_THEMES.find(t => t.id === profile.cabinet_theme) || null
+        : null;
+
+      onAuthenticated({
+        id:           session.user.id,
+        email:        session.user.email,
+        name:         profile?.display_name || session.user.email,
+        handle:       profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
+        avatarUrl:    profile?.avatar_url || null,
+        bio:          profile?.bio || null,
+        skinType:     profile?.skin_type || null,
+        skinConcerns: profile?.skin_concerns || [],
+        hairType:     profile?.hair_type || null,
+        cabinetName:  profile?.cabinet_name || null,
+        cabinetTheme: savedTheme,
+        role:         profile?.role || "user",
+      });
     });
+
+    // Unsubscribe when AuthGate unmounts
+    return () => subscription.unsubscribe();
   }, []);
 
   if (checking) return (
@@ -1861,13 +1871,39 @@ export default function App() {
   const handleSignOut       = () => { setAuthedUser(null); setActiveTab("feed"); setCabinetTheme(CABINET_THEMES[0]); setMyProducts([]); };
 
   const handleAddProduct = async (product) => {
-    setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, product]);
-    if (authedUser?.id && product.id) await supabase.from("user_products").insert({ user_id: authedUser.id, product_id: product.id, status: "using" });
+    // Optimistic local update first so UI feels instant
+    setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, { ...product, status: "using" }]);
+
+    if (authedUser?.id && product.id) {
+      const { data, error } = await supabase
+        .from("user_products")
+        .insert({ user_id: authedUser.id, product_id: product.id, status: "using" })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.warn("[handleAddProduct] insert error:", error.message);
+      } else if (data?.id) {
+        // Stamp user_product_id onto the local record so repurchase updates target the right row
+        setMyProducts(prev => prev.map(p => p.id === product.id ? { ...p, user_product_id: data.id } : p));
+      }
+    }
   };
 
   const handleRemoveProduct = async (product, persist) => {
     if (!persist) { setMyProducts(prev => prev.filter(p => p.id !== product.id)); return; }
-    if (authedUser?.id && product.id) await supabase.from("user_products").update({ deleted_at: new Date().toISOString() }).eq("user_id", authedUser.id).eq("product_id", product.id).is("deleted_at", null);
+
+    if (!authedUser?.id) return;
+
+    const query = supabase.from("user_products")
+      .update({ deleted_at: new Date().toISOString() })
+      .is("deleted_at", null);
+
+    const { error } = product.user_product_id
+      ? await query.eq("id", product.user_product_id)
+      : await query.eq("user_id", authedUser.id).eq("product_id", product.id);
+
+    if (error) console.warn("[handleRemoveProduct] update error:", error.message);
   };
 
   const handleThemeChange = async (theme) => {
@@ -1876,8 +1912,20 @@ export default function App() {
   };
 
   const handleRepurchaseChange = async (product, status) => {
+    // Optimistic update
     setMyProducts(prev => prev.map(p => p.id === product.id ? { ...p, status } : p));
-    if (authedUser?.id && product.id) await supabase.from("user_products").update({ status }).eq("user_id", authedUser.id).eq("product_id", product.id).is("deleted_at", null);
+
+    if (!authedUser?.id) return;
+
+    // Prefer targeting by user_product_id (the PK) — unambiguous even with soft-deleted rows.
+    // Fall back to product_id filter if user_product_id isn't stamped yet.
+    const query = supabase.from("user_products").update({ status }).is("deleted_at", null);
+
+    const { error } = product.user_product_id
+      ? await query.eq("id", product.user_product_id)
+      : await query.eq("user_id", authedUser.id).eq("product_id", product.id);
+
+    if (error) console.warn("[handleRepurchaseChange] update error:", error.message);
   };
 
   const shell = (children) => (
