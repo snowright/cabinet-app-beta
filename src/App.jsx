@@ -128,9 +128,6 @@ const categoryEmoji = (cat) => CAT_MAP[cat]?.emoji     || "✨";
 const categoryColor = (cat) => CAT_MAP[cat]?.cardColor || "#E8E8E8";
 
 // ─── MOVE 1: useProductSearch — shared hook, replaces duplicate search blocks ─
-// Encapsulates the Supabase fan-out query used in both AddProductModal and DiscoverTab.
-// Returns { results, searching } and reacts to query changes with 300ms debounce.
-
 const BLACK_OWNED_TERMS = ["black owned", "black-owned", "blackowned", "black brand", "black beauty"];
 const INDIE_TERMS       = ["indie", "independent", "indie brand"];
 
@@ -161,7 +158,6 @@ function useProductSearch(query) {
             ? `name.ilike.%${q}%,description.ilike.%${q}%,brand_id.in.(${brandIds.join(",")})`
             : `name.ilike.%${q}%,description.ilike.%${q}%`)
           .limit(12),
-        // search_tags is text[] — use array-to-text cast for ilike search
         supabase.from("product_lines").select(baseSelect)
           .ilike("search_tags::text", `%${q}%`).limit(12),
         ...((isBlackOwned || isIndie) && brandIds.length > 0
@@ -198,9 +194,6 @@ function useProductSearch(query) {
 }
 
 // ─── MOVE 2: BottomSheet — shared wrapper for all slide-up modals ─────────────
-// Replaces the identical backdrop + slideUp + drag handle markup in
-// ProductDetailModal, AddProductModal, and ThemePicker.
-
 function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20px 40px" }) {
   return (
     <div
@@ -208,7 +201,6 @@ function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, overflowY: "auto", position: "relative" }}>
-        {/* Sticky header: decorative pill + × button */}
         <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
           <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
           <button onClick={onClose} aria-label="Close" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
@@ -222,7 +214,6 @@ function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20
 }
 
 // ─── SIGNAL DATA ──────────────────────────────────────────────────────────────
-
 const MOCK_FRIEND_SIGNALS = {
   1: [{ initials: "SR", color: "#D4A5A5" }, { initials: "MC", color: "#C8B8A2" }],
   3: [{ initials: "JW", color: "#A5C8B8" }],
@@ -236,7 +227,6 @@ const friendAvatarsFor  = (id) => MOCK_FRIEND_SIGNALS[id] || [];
 const repurchaseRateFor = (id) => MOCK_REPURCHASE_RATES[id] ?? null;
 
 // ─── COMPACT PRODUCT CARD ────────────────────────────────────────────────────
-
 function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
   return (
     <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer" }} className="shelf-item">
@@ -262,7 +252,6 @@ function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
 }
 
 // ─── CABINET GRID ────────────────────────────────────────────────────────────
-
 function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "all" }) {
   const activeProducts   = products.filter(p => p.status !== "not_repurchase");
   const archivedProducts = products.filter(p => p.status === "not_repurchase");
@@ -316,7 +305,6 @@ function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "a
 }
 
 // ─── PRODUCT DETAIL MODAL ────────────────────────────────────────────────────
-
 function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, isOwn, onAdd }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, setRemoving]           = useState(false);
@@ -466,7 +454,6 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
 }
 
 // ─── ADD PRODUCT MODAL ───────────────────────────────────────────────────────
-
 function AddProductModal({ onClose, onAdd }) {
   const [mode, setMode]                   = useState(null);
   const [searchQuery, setSearchQuery]     = useState("");
@@ -474,10 +461,8 @@ function AddProductModal({ onClose, onAdd }) {
   const [browseProducts, setBrowseProducts] = useState([]);
   const [adding, setAdding]               = useState(false);
 
-  // MOVE 1: Use shared hook instead of duplicated search logic
   const { results, searching } = useProductSearch(searchQuery);
 
-  // Category browse (Supabase — unchanged)
   useEffect(() => {
     if (!selectedCategory) { setBrowseProducts([]); return; }
     supabase.from("product_lines")
@@ -612,7 +597,6 @@ function AddProductModal({ onClose, onAdd }) {
 }
 
 // ─── THEME PICKER ─────────────────────────────────────────────────────────────
-
 function ThemePicker({ current, onSelect, onClose }) {
   return (
     <BottomSheet onClose={onClose} maxHeight="80vh" padding="24px 20px 48px">
@@ -634,7 +618,6 @@ function ThemePicker({ current, onSelect, onClose }) {
 }
 
 // ─── FEED POST CARD ──────────────────────────────────────────────────────────
-
 function FeedPostCard({ post, index }) {
   const [liked, setLiked] = useState(false);
   return (
@@ -671,8 +654,6 @@ function FeedPostCard({ post, index }) {
 }
 
 // ─── AVATAR ──────────────────────────────────────────────────────────────────
-// Renders a real image if avatarUrl exists, otherwise initials fallback.
-
 function Avatar({ avatarUrl, initials, size = 60 }) {
   const [imgError, setImgError] = useState(false);
   const showImg = avatarUrl && !imgError;
@@ -687,9 +668,6 @@ function Avatar({ avatarUrl, initials, size = 60 }) {
 }
 
 // ─── PILL SCROLL ROW ─────────────────────────────────────────────────────────
-// Hides the scrollbar; right-edge fade signals there's more to scroll.
-// fadeColor must match the exact background behind the row.
-
 function PillScrollRow({ children, fadeColor = "#FDFAF7" }) {
   return (
     <div className="pill-scroll-wrap">
@@ -700,7 +678,6 @@ function PillScrollRow({ children, fadeColor = "#FDFAF7" }) {
 }
 
 // ─── BEAUTY DNA PILLS ────────────────────────────────────────────────────────
-
 const DNA_PILL_STYLES = {
   skinType:     { bg: "#FBF6F0", border: "#E8D5BC", color: "#8B6F47" },
   hairType:     { bg: "#F2F8F4", border: "#C0DBC8", color: "#4A7C59" },
@@ -728,9 +705,6 @@ function dnaPill({ bg, border, color }) {
 }
 
 // ─── EDIT PROFILE MODAL ──────────────────────────────────────────────────────
-// Handles: avatar upload → Supabase Storage, then writes public URL to profiles.
-// Bio capped at 120 chars. Skin concerns multi-select (max 3). All saves via upsert.
-
 const SKIN_TYPES   = ["Normal", "Dry", "Oily", "Combination", "Sensitive"];
 const HAIR_TYPES   = ["Fine / Straight", "Wavy", "Curly (3a–3c)", "Coily (4a–4c)", "Color-treated", "Natural / Protective styles"];
 const SKIN_CONCERN_OPTIONS = ["Acne", "Dryness", "Hyperpigmentation", "Fine lines", "Redness", "Sensitivity", "Uneven texture", "Pores"];
@@ -764,12 +738,9 @@ function EditProfileModal({ user, onClose, onUpdate }) {
     if (file.size > 2 * 1024 * 1024) { setErrors(p => ({ ...p, avatar: "Max 2MB" })); return; }
     setUploading(true);
     setErrors(p => ({ ...p, avatar: null }));
-    // Upload to Supabase Storage bucket "avatars", named by user UUID (overwrites on update)
     const { error: uploadError } = await supabase.storage.from("avatars").upload(user.id, file, { upsert: true, contentType: file.type });
     if (uploadError) { setErrors(p => ({ ...p, avatar: "Upload failed — try again" })); setUploading(false); return; }
-    // Get the public URL
     const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(user.id);
-    // Bust cache by appending a timestamp so the browser reloads the new image
     setAvatarUrl(publicUrl + "?t=" + Date.now());
     setUploading(false);
   };
@@ -802,7 +773,7 @@ function EditProfileModal({ user, onClose, onUpdate }) {
         return;
       }
 
-      // Re-read from DB to confirm write succeeded and surface the true stored values
+      // ✅ Self-profile read — stays on profiles (self-only policy allows this)
       const { data: fresh } = await supabase.from("profiles")
         .select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
         .eq("id", user.id)
@@ -833,7 +804,6 @@ function EditProfileModal({ user, onClose, onUpdate }) {
 
   return (
     <BottomSheet onClose={onClose} maxHeight="92vh" padding="16px 20px 48px">
-      {/* Avatar */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20, paddingBottom: 20, borderBottom: "0.5px solid #EDE9E3" }}>
         <div style={{ position: "relative", cursor: "pointer" }} onClick={() => fileRef.current?.click()}>
           <Avatar avatarUrl={avatarUrl} initials={initials} size={64} />
@@ -849,7 +819,6 @@ function EditProfileModal({ user, onClose, onUpdate }) {
         </div>
       </div>
 
-      {/* Name + Handle + Cabinet name */}
       <div style={{ marginBottom: 14 }}>{fieldLabel("Full name")}{fieldInput({ name: "displayName", value: displayName, onChange: e => setDisplayName(e.target.value), placeholder: "Your name" })}{errMsg("displayName")}</div>
       <div style={{ marginBottom: 14 }}>
         {fieldLabel("Handle")}
@@ -861,14 +830,12 @@ function EditProfileModal({ user, onClose, onUpdate }) {
       </div>
       <div style={{ marginBottom: 14 }}>{fieldLabel("Cabinet name")}{fieldInput({ name: "cabinetName", value: cabinetName, onChange: e => setCabinetName(e.target.value), placeholder: `${displayName.split(" ")[0] || "My"}'s Cabinet`, maxLength: 40, style: { fontFamily: "'Cormorant Garamond', serif", fontSize: 15 } })}</div>
 
-      {/* Bio */}
       <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: "0.5px solid #EDE9E3" }}>
         {fieldLabel(`Bio · ${bio.length} / ${BIO_MAX}`)}
         <textarea value={bio} onChange={e => setBio(e.target.value.slice(0, BIO_MAX))} placeholder="Skincare minimalist. Fragrance maximalist…" rows={3} style={{ width: "100%", padding: "11px 13px", background: "#FFF", border: `1.5px solid ${errors.bio ? "#E07070" : "#E5E0D8"}`, borderRadius: 10, fontSize: 13, color: "#1A1A1A", fontFamily: "'Jost', sans-serif", lineHeight: 1.6, resize: "none", boxSizing: "border-box" }} onFocus={e => e.target.style.borderColor = "#C8B8A2"} onBlur={e => e.target.style.borderColor = "#E5E0D8"} />
         {errMsg("bio")}
       </div>
 
-      {/* Beauty DNA */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#888", marginBottom: 14 }}>Beauty DNA</div>
         <div style={{ marginBottom: 12 }}>
@@ -904,7 +871,6 @@ function EditProfileModal({ user, onClose, onUpdate }) {
 }
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
-
 function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRestoreProduct, onRepurchaseChange, onSignOut, onUpdateUser, loading }) {
   const [showThemePicker,  setShowThemePicker]  = useState(false);
   const [showEditProfile,  setShowEditProfile]  = useState(false);
@@ -915,7 +881,6 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const [toast,            setToast]            = useState(null);
   const undoRef = useRef(null);
 
-  // Clean identity — never render a raw email as a display name
   const rawName     = user?.name || "";
   const displayName = rawName.includes("@") ? rawName.split("@")[0] : rawName || "User";
   const handle      = user?.handle || "@user";
@@ -927,9 +892,8 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const handleSignOut = async () => { setSigningOut(true); await supabase.auth.signOut(); onSignOut(); };
 
   const handleRemove = (product) => {
-    // Snapshot the full product object before removing — needed for clean undo
     const snapshot = { ...product };
-    onRemoveProduct(product, false);   // optimistic local remove
+    onRemoveProduct(product, false);
     setSelectedProduct(null);
     setToast({ product: snapshot, visible: true });
     if (undoRef.current) clearTimeout(undoRef.current);
@@ -944,9 +908,6 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 
   const handleUndo = () => {
     if (undoRef.current) clearTimeout(undoRef.current);
-    // Restore directly to local products state — do NOT call onAddProduct
-    // which would re-insert to Supabase. The row was never deleted (persist=false),
-    // so we just put it back in local state.
     if (toast?.product) {
       onRestoreProduct(toast.product);
     }
@@ -957,7 +918,6 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
       <div style={{ padding: "20px 20px 14px", background: "#FDFAF7" }}>
 
-        {/* ── Avatar + identity ── */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
             <Avatar avatarUrl={user?.avatarUrl} initials={initials} size={60} />
@@ -974,40 +934,33 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
           </div>
         </div>
 
-        {/* ── Bio ── */}
         {user?.bio ? (
           <p style={{ fontSize: 12, color: "#666", lineHeight: 1.65, fontStyle: "italic", margin: "0 0 12px", paddingBottom: 12, borderBottom: "0.5px solid #EDE9E3" }}>"{user.bio}"</p>
         ) : null}
 
-        {/* ── Stats ── */}
         <div style={{ display: "flex", gap: 20, marginBottom: 12 }}>
           <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{activeProducts.length}</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>products</div></div>
           <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>0</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>followers</div></div>
           <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>0</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>following</div></div>
         </div>
 
-        {/* ── Beauty DNA (from profile) ── */}
         <BeautyDNA skinType={user?.skinType} skinConcerns={user?.skinConcerns} hairType={user?.hairType} />
 
-        {/* ── Beta badge ── */}
         {isBeta && (
           <div style={{ marginBottom: 12 }}>
             <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 20, fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.08em", background: "#1A1A1A", color: "#C8B8A2" }}>◈ BETA MEMBER</span>
           </div>
         )}
 
-        {/* ── Settings drawer ── */}
         {showSettings && (
           <div style={{ background: "#FFF", border: "1.5px solid #EDE9E3", borderRadius: 12, padding: "12px 14px", marginBottom: 12, animation: "fadeUp 0.2s ease" }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#BBB", letterSpacing: "0.1em", marginBottom: 10, textTransform: "uppercase" }}>Settings</div>
-            {/* TODO: Cabinet themes removed — grid UI redesign needed to match new larger card sizes. Re-enable after redesign. */}
             <button onClick={handleSignOut} disabled={signingOut} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "none", border: "none", color: "#E07070", fontSize: 13, textAlign: "left", cursor: signingOut ? "default" : "pointer" }}>
               <span style={{ fontSize: 16 }}>↪</span><span>{signingOut ? "Signing out…" : "Sign Out"}</span>
             </button>
           </div>
         )}
 
-        {/* ── Category filter pills with fade scroll ── */}
         <PillScrollRow fadeColor="#FDFAF7">
           {[{ id: "all", label: `All · ${activeProducts.length}` }, ...CATEGORIES.map(cat => {
             const count = activeProducts.filter(p => p.category === cat.id).length;
@@ -1033,7 +986,6 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
         </div>
       )}
 
-      {/* TODO: ThemePicker disabled — cabinet theme redesign pending */}
       {showEditProfile  && <EditProfileModal user={user} onClose={() => setShowEditProfile(false)} onUpdate={onUpdateUser} />}
       {selectedProduct  && <ProductDetailModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onRemove={handleRemove} onRepurchaseChange={handleRepurchase} isOwn={true} />}
     </div>
@@ -1041,7 +993,6 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 }
 
 // ─── FEED TAB ────────────────────────────────────────────────────────────────
-
 function FeedTab({ currentUserId }) {
   const [filter,   setFilter]   = useState("all");
   const [posts,    setPosts]    = useState([]);
@@ -1054,7 +1005,6 @@ function FeedTab({ currentUserId }) {
 
   return (
     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
-      {/* Sticky header */}
       <div style={{ padding: "20px 20px 0", background: "#FDFAF7", position: "sticky", top: 0, zIndex: 5, borderBottom: "1px solid #EDE9E3" }}>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>
           cabinet<span style={{ fontStyle: "italic", color: "#C8B8A2" }}>.</span>
@@ -1068,7 +1018,6 @@ function FeedTab({ currentUserId }) {
 
       <div style={{ padding: "14px 16px 0" }}>
         {loading ? (
-          // Skeleton cards while loading
           [1,2,3].map(i => (
             <div key={i} style={{ background: "#FFF", borderRadius: 20, border: "1.5px solid #EDE9E3", padding: 18, marginBottom: 12 }}>
               <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
@@ -1092,9 +1041,9 @@ function FeedTab({ currentUserId }) {
 }
 
 // ── Feed data fetcher ─────────────────────────────────────────────────────────
-// Phase 0: global feed — most recent cabinet additions across all users.
-// Phase 1: will filter to followed users first, backfill with global.
-// Joined: user_products → profiles (poster) + products → product_lines → brands.
+// ✅ SECURITY FIX: reads profiles_public instead of profiles
+// profiles_public exposes only safe fields; sensitive attributes stay locked
+// behind the self-only SELECT policy on the base profiles table.
 
 async function loadFeed(userId, categoryFilter = "all") {
   let query = supabase
@@ -1103,26 +1052,25 @@ async function loadFeed(userId, categoryFilter = "all") {
       id,
       created_at,
       status,
-      profiles ( id, username, display_name, avatar_url ),
+      profiles_public ( id, username, display_name, avatar_url ),
       products (
         id, name, price_usd, image_url,
         product_lines ( name, category, brands ( name ) )
       )
     `)
     .is("deleted_at", null)
-    .neq("user_id", userId)          // don't show your own additions
+    .neq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(40);
 
   const { data, error } = await query;
   if (error) { console.warn("[loadFeed] error:", error.message); return []; }
 
-  // Normalize and deduplicate by (user_id + product_id)
   const seen = new Set();
   const posts = [];
   for (const row of (data || [])) {
-    if (!row.profiles || !row.products) continue;
-    const key = `${row.profiles.id}-${row.products.id}`;
+    if (!row.profiles_public || !row.products) continue;
+    const key = `${row.profiles_public.id}-${row.products.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -1130,8 +1078,8 @@ async function loadFeed(userId, categoryFilter = "all") {
     const cat    = pl?.category || "skincare";
     if (categoryFilter !== "all" && cat !== categoryFilter) continue;
 
-    const name   = row.profiles.display_name || row.profiles.username || "cabinet. user";
-    const handle = row.profiles.username ? "@" + row.profiles.username : "@user";
+    const name   = row.profiles_public.display_name || row.profiles_public.username || "cabinet. user";
+    const handle = row.profiles_public.username ? "@" + row.profiles_public.username : "@user";
     const initials = name.split(/[\s._-]/).map(n => n[0]).filter(Boolean).join("").slice(0,2).toUpperCase() || "CB";
 
     posts.push({
@@ -1139,8 +1087,8 @@ async function loadFeed(userId, categoryFilter = "all") {
       user:        name,
       handle,
       initials,
-      avatarUrl:   row.profiles.avatar_url || null,
-      avatarColor: stringToColor(row.profiles.id),
+      avatarUrl:   row.profiles_public.avatar_url || null,
+      avatarColor: stringToColor(row.profiles_public.id),
       time:        timeAgo(row.created_at),
       product: {
         id:       row.products.id,
@@ -1159,7 +1107,6 @@ async function loadFeed(userId, categoryFilter = "all") {
   return posts;
 }
 
-// Deterministic color from a UUID string — consistent avatar bg per user
 function stringToColor(str = "") {
   const PALETTE = ["#D4A5A5","#A5C8B8","#B8A5C8","#C8B8A2","#A5B8C8","#C8A5B8","#A8C8A5","#C8C4A5"];
   let hash = 0;
@@ -1167,7 +1114,6 @@ function stringToColor(str = "") {
   return PALETTE[Math.abs(hash) % PALETTE.length];
 }
 
-// Human-readable relative time
 function timeAgo(iso) {
   const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
   if (diff < 60)   return "just now";
@@ -1176,7 +1122,6 @@ function timeAgo(iso) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-// Empty state — different message depending on follow state
 function FeedEmptyState() {
   return (
     <div style={{ textAlign: "center", padding: "64px 24px 0" }}>
@@ -1192,7 +1137,6 @@ function FeedEmptyState() {
 }
 
 // ─── USER PROFILE VIEW ───────────────────────────────────────────────────────
-
 function UserProfileView({ user, onBack }) {
   const [tab, setTab]                     = useState("cabinet");
   const [following, setFollowing]         = useState(false);
@@ -1250,7 +1194,6 @@ function UserProfileView({ user, onBack }) {
 }
 
 // ─── DISCOVER TAB ─────────────────────────────────────────────────────────────
-
 function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
   const [query, setQuery]                 = useState("");
   const [activeFilter, setActiveFilter]   = useState("all");
@@ -1261,7 +1204,6 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const inputRef = useRef(null);
 
-  // MOVE 1: Use shared hook
   const { results: productResults, searching } = useProductSearch(query);
 
   useEffect(() => { setAddedIds(new Set(myProducts.map(p => p.id))); }, [myProducts]);
@@ -1289,12 +1231,13 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
   useEffect(() => {
     if (q.length < 1) { setUserResults([]); return; }
     const timer = setTimeout(async () => {
+      // ✅ SECURITY FIX: reads profiles_public instead of profiles
+      // Only safe, non-sensitive fields are exposed through this view.
       let userQuery = supabase
-        .from("profiles")
+        .from("profiles_public")
         .select("id, username, display_name, avatar_url, bio")
         .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
         .limit(8);
-      // Exclude the current user from their own search results
       if (currentUserId) userQuery = userQuery.neq("id", currentUserId);
       const { data, error } = await userQuery;
       if (error) { console.warn("[DiscoverTab] user search:", error.message); return; }
@@ -1311,6 +1254,7 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
     }, 300);
     return () => clearTimeout(timer);
   }, [q]);
+
   const topicResults = q.length > 0 ? CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : [];
   const hasResults   = userResults.length > 0 || productResults.length > 0 || topicResults.length > 0;
   const showPeople   = activeFilter === "all" || activeFilter === "people";
@@ -1417,7 +1361,6 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
 }
 
 // ─── TRENDING SECTION ─────────────────────────────────────────────────────────
-
 function TrendingSection({ addedIds, onAdd, onProductClick }) {
   return (
     <div style={{ paddingTop: 20 }}>
@@ -1445,7 +1388,6 @@ function TrendingRow({ product, rank, index, owned, onAdd, onProductClick, frien
 }
 
 // ─── PRODUCT CARD ─────────────────────────────────────────────────────────────
-
 function ProductCard({ product, index, owned, onAdd, onProductClick, friendAvatars, repurchaseRate }) {
   return (
     <div className="fade-up" onClick={() => onProductClick?.(product)} style={{ display: "flex", alignItems: "center", gap: 12, background: "#FFF", borderRadius: 14, padding: "12px 14px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${index * 0.04}s`, opacity: 0, transition: "background 0.15s" }} onMouseEnter={e => e.currentTarget.style.background = "#FBF9F6"} onMouseLeave={e => e.currentTarget.style.background = "#FFF"}>
@@ -1461,7 +1403,6 @@ function ProductCard({ product, index, owned, onAdd, onProductClick, friendAvata
 }
 
 // ─── SIGNAL ROW ──────────────────────────────────────────────────────────────
-
 function SignalRow({ friendAvatars = [], repurchaseRate = null }) {
   if (friendAvatars.length > 0) return (
     <div style={{ display: "flex", alignItems: "center", height: 18 }}>
@@ -1479,7 +1420,6 @@ function SignalRow({ friendAvatars = [], repurchaseRate = null }) {
 }
 
 // ─── ADD BUTTON ───────────────────────────────────────────────────────────────
-
 function AddButton({ owned, onAdd }) {
   return (
     <button onClick={e => { e.stopPropagation(); if (!owned) onAdd(); }} style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, border: owned ? "1.5px solid rgba(122,175,138,0.3)" : "1.5px solid #E5E0D8", background: owned ? "rgba(122,175,138,0.1)" : "#FFF", display: "flex", alignItems: "center", justifyContent: "center", cursor: owned ? "default" : "pointer", transition: "all 0.2s ease", color: owned ? "#7AAF8A" : "#999" }} aria-label={owned ? "In your cabinet" : "Add to cabinet"}>
@@ -1492,13 +1432,11 @@ function AddButton({ owned, onAdd }) {
 }
 
 // ─── SECTION LABEL ───────────────────────────────────────────────────────────
-
 function SectionLabel({ children }) {
   return <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#BBB", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
 }
 
 // ─── USER ROW ────────────────────────────────────────────────────────────────
-
 function UserRow({ user, index = 0, onTap }) {
   const [following, setFollowing] = useState(false);
   return (
@@ -1522,7 +1460,6 @@ function UserRow({ user, index = 0, onTap }) {
 }
 
 // ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
-
 function BottomNav({ active, onChange, onAddPress }) {
   const TABS = [
     { id: "feed",     label: "Feed",     icon: FeedIcon },
@@ -1578,7 +1515,6 @@ function BottomNav({ active, onChange, onAddPress }) {
 }
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
-
 function FeedIcon({ active }) {
   return <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h8" stroke={active ? "#1A1A1A" : "#C8C0B8"} strokeWidth="1.6" strokeLinecap="round"/></svg>;
 }
@@ -1590,7 +1526,6 @@ function CabinetIcon({ active }) {
 }
 
 // ─── AUTH COMPONENTS ─────────────────────────────────────────────────────────
-
 function AuthInput({ label, type = "text", value, onChange, placeholder, error, autoFocus }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -1764,6 +1699,7 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         setErrors({ password: error.message.includes("Invalid login credentials") ? "Incorrect email or password" : error.message.includes("Email not confirmed") ? "Please verify your email first — check your inbox" : error.message });
         setLoading(false); return;
       }
+      // ✅ Self-profile read — stays on profiles (self-only policy allows this)
       const { data: profile } = await supabase.from("profiles").select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
         .eq("id", data.user.id)
         .maybeSingle();
@@ -1916,6 +1852,7 @@ function OnboardingScreen({ user, onComplete }) {
     const theme     = CABINET_THEMES.find(t => t.id === selectedTheme);
     const finalName = cabinetName.trim() || (user?.name ? `${user.name.split(" ")[0]}'s Cabinet` : "My Cabinet");
     if (user?.id) {
+      // ✅ Self-profile write — stays on profiles (self-only policy allows this)
       await supabase.from("profiles").update({ onboarding_complete: true, cabinet_name: finalName }).eq("id", user.id);
       localStorage.setItem("cabinet_theme_" + user.id, selectedTheme);
     }
@@ -1963,9 +1900,6 @@ function OnboardingScreen({ user, onComplete }) {
 }
 
 // ─── RESET PASSWORD SCREEN ───────────────────────────────────────────────────
-// Shown when user clicks the Supabase reset link.
-// Updates the password, clears the session, then routes to sign in.
-
 function ResetPasswordScreen({ onDone }) {
   const [password,  setPassword]  = useState("");
   const [confirm,   setConfirm]   = useState("");
@@ -1985,7 +1919,6 @@ function ResetPasswordScreen({ onDone }) {
       setLoading(false);
       return;
     }
-    // Sign out so user consciously signs back in with new password
     await supabase.auth.signOut();
     setLoading(false);
     setDone(true);
@@ -2033,12 +1966,6 @@ function AuthGate({ onAuthenticated }) {
   const [checking, setChecking]     = useState(true);
 
   useEffect(() => {
-    // onAuthStateChange fires after the JWT is verified — safer than getSession
-    // which can fire before the session is ready, causing profile reads to fail silently.
-    // getSession handles the initial load — it reads from local storage immediately
-    // so the splash never hangs. onAuthStateChange then keeps the session live.
-    // Handle password reset links — Supabase fires a hash event we need to catch
-    // before getSession so we can show the reset UI instead of auto-logging in
     const hash = window.location.hash;
     if (hash.includes("type=recovery")) {
       setChecking(false);
@@ -2049,6 +1976,7 @@ function AuthGate({ onAuthenticated }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { setChecking(false); return; }
 
+      // ✅ Self-profile read — stays on profiles (self-only policy allows this)
       const { data: profile, error } = await supabase.from("profiles")
         .select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
         .eq("id", session.user.id)
@@ -2093,7 +2021,6 @@ function AuthGate({ onAuthenticated }) {
 }
 
 // ─── ROOT APP ────────────────────────────────────────────────────────────────
-
 export default function App() {
   const [authedUser, setAuthedUser]     = useState(null);
   const [activeTab, setActiveTab]       = useState("feed");
@@ -2104,7 +2031,6 @@ export default function App() {
 
   const loadCabinet = async (userId) => {
     setLoadingCabinet(true);
-    // cabinet_theme is stored in localStorage keyed by user ID (not in DB)
     const savedThemeId = localStorage.getItem("cabinet_theme_" + userId);
     if (savedThemeId) { const saved = CABINET_THEMES.find(t => t.id === savedThemeId); if (saved) setCabinetTheme(saved); }
 
@@ -2131,12 +2057,10 @@ export default function App() {
   const handleSignOut       = () => { setAuthedUser(null); setActiveTab("feed"); setCabinetTheme(CABINET_THEMES[0]); setMyProducts([]); };
 
   const handleAddProduct = async (product) => {
-    // Optimistic local update first so UI feels instant
     setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [...prev, { ...product, status: "using", addedAt: new Date().toISOString() }]);
 
     if (!authedUser?.id || !product.id) return;
 
-    // Guard: mock products use integer IDs — only write to DB when we have a real UUID
     const isUUID = typeof product.id === "string" && /^[0-9a-f-]{36}$/.test(product.id);
     if (!isUUID) {
       console.info("[handleAddProduct] skipping DB write — mock product id:", product.id);
@@ -2152,7 +2076,6 @@ export default function App() {
     if (error) {
       console.warn("[handleAddProduct] insert error:", error.message);
     } else if (data?.id) {
-      // Stamp user_product_id so repurchase/remove updates target the right row
       setMyProducts(prev => prev.map(p => p.id === product.id ? { ...p, user_product_id: data.id } : p));
     }
   };
@@ -2183,13 +2106,10 @@ export default function App() {
   };
 
   const handleRepurchaseChange = async (product, status) => {
-    // Optimistic update
     setMyProducts(prev => prev.map(p => p.id === product.id ? { ...p, status } : p));
 
     if (!authedUser?.id) return;
 
-    // Prefer targeting by user_product_id (the PK) — unambiguous even with soft-deleted rows.
-    // Fall back to product_id filter if user_product_id isn't stamped yet.
     const query = supabase.from("user_products").update({ status }).is("deleted_at", null);
 
     const { error } = product.user_product_id
