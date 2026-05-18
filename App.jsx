@@ -354,14 +354,14 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
             </div>
           )}
 
-          <div style={{ width: "100%", height: 200, borderRadius: 18, marginBottom: 16, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", filter: isArchived ? "saturate(0.4)" : "none" }}>
+          <div style={{ width: "100%", height: "20vh", minHeight: 130, maxHeight: 180, borderRadius: 18, marginBottom: 12, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", filter: isArchived ? "saturate(0.4)" : "none" }}>
             <div style={{ position: "absolute", top: 0, left: "10%", width: "25%", height: "50%", background: "linear-gradient(180deg,rgba(255,255,255,0.4),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
             <span style={{ fontSize: 64, position: "relative", zIndex: 1 }}>{product.emoji}</span>
           </div>
 
           <div style={{ marginBottom: 14, borderBottom: "0.5px solid #F0EDE8", paddingBottom: 14 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", marginBottom: 3 }}>{product.brand}</div>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: isArchived ? "#888" : "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{product.name}</div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: isArchived ? "#888" : "#1A1A1A", lineHeight: 1.2, marginBottom: 4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{product.name}</div>
             <div style={{ fontSize: 12, color: "#AAA" }}>{categoryLabel}{product.price ? ` · ${product.price}` : ""}</div>
           </div>
 
