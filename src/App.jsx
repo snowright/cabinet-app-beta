@@ -229,22 +229,24 @@ const repurchaseRateFor = (id) => MOCK_REPURCHASE_RATES[id] ?? null;
 // ─── COMPACT PRODUCT CARD ────────────────────────────────────────────────────
 function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
   return (
-    <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer" }} className="shelf-item">
-      <div style={{ width: "100%", aspectRatio: "0.85", background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: 0, left: "12%", width: "28%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.45),transparent)", borderRadius: "50%", transform: "skewX(-10deg)", pointerEvents: "none" }} />
-        <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>
-        {repurchaseStatus === "repurchase" && (
-          <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.18)", border: "1px solid rgba(74,124,89,0.3)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#4A7C59" }}>↻</div>
-        )}
-        {repurchaseStatus === "not_repurchase" && (
-          <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.15)", border: "1px solid rgba(160,140,128,0.25)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#A08C80" }}>✕</div>
-        )}
-        {isOwn && (!repurchaseStatus || repurchaseStatus === "using") && (
-          <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.06)", border: "1px dashed rgba(160,140,128,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#C8C0B8", opacity: 0.5 }}>?</div>
-        )}
+    <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer", display: "flex", flexDirection: "column" }} className="shelf-item">
+      <div style={{ width: "100%", paddingBottom: "118%", position: "relative", background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, overflow: "hidden", flexShrink: 0 }}>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ position: "absolute", top: 0, left: "12%", width: "28%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.45),transparent)", borderRadius: "50%", transform: "skewX(-10deg)", pointerEvents: "none" }} />
+          <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>
+          {repurchaseStatus === "repurchase" && (
+            <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.18)", border: "1px solid rgba(74,124,89,0.3)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#4A7C59" }}>↻</div>
+          )}
+          {repurchaseStatus === "not_repurchase" && (
+            <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.15)", border: "1px solid rgba(160,140,128,0.25)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#A08C80" }}>✕</div>
+          )}
+          {isOwn && (!repurchaseStatus || repurchaseStatus === "using") && (
+            <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.06)", border: "1px dashed rgba(160,140,128,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#C8C0B8", opacity: 0.5 }}>?</div>
+          )}
+        </div>
       </div>
-      <div style={{ padding: "6px 8px 8px" }}>
-        <div style={{ fontSize: 8.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{product.brand}</div>
+      <div style={{ padding: "6px 8px 8px", height: 52, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "flex-start", overflow: "hidden" }}>
+        <div style={{ fontSize: 8.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0 }}>{product.brand}</div>
         <div style={{ fontSize: 11, color: "#1A1A1A", lineHeight: 1.3, marginTop: 1, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{product.name}</div>
       </div>
     </div>
@@ -261,7 +263,7 @@ function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "a
   const filteredArchived = activeFilter === "all" ? archivedProducts : archivedProducts.filter(p => p.category === activeFilter);
 
   return (
-    <div style={{ padding: "0 16px" }}>
+    <div style={{ padding: "0 16px", overflowX: "hidden", width: "100%", boxSizing: "border-box" }}>
       {filteredActive.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>✦</div>
@@ -915,7 +917,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   };
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
+    <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: 100 }}>
       <div style={{ padding: "20px 20px 14px", background: "#FDFAF7" }}>
 
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
@@ -1004,7 +1006,7 @@ function FeedTab({ currentUserId }) {
   }, [currentUserId, filter]);
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", paddingBottom: 100 }}>
+    <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: 100 }}>
       <div style={{ padding: "20px 20px 0", background: "#FDFAF7", position: "sticky", top: 0, zIndex: 5, borderBottom: "1px solid #EDE9E3" }}>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>
           cabinet<span style={{ fontStyle: "italic", color: "#C8B8A2" }}>.</span>
