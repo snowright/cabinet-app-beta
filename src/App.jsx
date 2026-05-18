@@ -940,8 +940,8 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 
         <div style={{ display: "flex", gap: 20, marginBottom: 12 }}>
           <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{activeProducts.length}</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>products</div></div>
-          <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>0</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>followers</div></div>
-          <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>0</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>following</div></div>
+          <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{user.followerCount || 0}</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>followers</div></div>
+          <div><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{user.followingCount || 0}</div><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#BBB", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>following</div></div>
         </div>
 
         <BeautyDNA skinType={user?.skinType} skinConcerns={user?.skinConcerns} hairType={user?.hairType} />
@@ -1160,7 +1160,7 @@ function UserProfileView({ user, onBack }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: "#888", lineHeight: 1.5, marginBottom: 12 }}>{user.bio}</div>
               <div style={{ display: "flex", gap: 20 }}>
-                {[{ label: "products", val: user.products.length }, { label: "followers", val: user.followers.toLocaleString() }, { label: "following", val: user.following }].map(s => (
+                {[{ label: "products", val: loadingProducts ? "—" : products.length }, { label: "followers", val: (user.followers || 0).toLocaleString() }, { label: "following", val: user.following || 0 }].map(s => (
                   <div key={s.label}>
                     <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{s.val}</div>
                     <div style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{s.label}</div>
@@ -1262,7 +1262,7 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
       // Only safe, non-sensitive fields are exposed through this view.
       let userQuery = supabase
         .from("profiles_public")
-        .select("id, username, display_name, avatar_url, bio")
+        .select("id, username, display_name, avatar_url, bio, follower_count, following_count")
         .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
         .limit(8);
       if (currentUserId) userQuery = userQuery.neq("id", currentUserId);
@@ -1276,7 +1276,7 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
         avatarUrl:   p.avatar_url || null,
         avatarColor: stringToColor(p.id),
         bio:         p.bio || "",
-        followers: 0, following: 0, products: [], cabinetTheme: CABINET_THEMES[0], posts: [],
+        followers: p.follower_count || 0, following: p.following_count || 0, products: [], cabinetTheme: CABINET_THEMES[0], posts: [],
       })));
     }, 300);
     return () => clearTimeout(timer);
@@ -1727,7 +1727,7 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         setLoading(false); return;
       }
       // ✅ Self-profile read — stays on profiles (self-only policy allows this)
-      const { data: profile } = await supabase.from("profiles").select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
+      const { data: profile } = await supabase.from("profiles").select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role, follower_count, following_count")
         .eq("id", data.user.id)
         .maybeSingle();
       const savedThemeId = localStorage.getItem("cabinet_theme_" + data.user.id);
@@ -1743,6 +1743,8 @@ function SignInScreen({ onBack, onSuccess, onForgot }) {
         skinConcerns: profile?.skin_concerns || [],
         hairType: profile?.hair_type || null,
         cabinetName: profile?.cabinet_name || null,
+        followerCount: profile?.follower_count || 0,
+        followingCount: profile?.following_count || 0,
         cabinetTheme: savedTheme,
         role: profile?.role || "user",
       });
