@@ -229,23 +229,21 @@ const repurchaseRateFor = (id) => MOCK_REPURCHASE_RATES[id] ?? null;
 // ─── COMPACT PRODUCT CARD ────────────────────────────────────────────────────
 function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
   return (
-    <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer", display: "flex", flexDirection: "column", height: "100%" }} className="shelf-item">
-      <div style={{ flex: 1, position: "relative", background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, overflow: "hidden", minHeight: 100 }}>
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ position: "absolute", top: 0, left: "12%", width: "28%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.45),transparent)", borderRadius: "50%", transform: "skewX(-10deg)", pointerEvents: "none" }} />
-          <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>
-          {repurchaseStatus === "repurchase" && (
-            <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.18)", border: "1px solid rgba(74,124,89,0.3)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#4A7C59" }}>↻</div>
-          )}
-          {repurchaseStatus === "not_repurchase" && (
-            <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.15)", border: "1px solid rgba(160,140,128,0.25)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#A08C80" }}>✕</div>
-          )}
-          {isOwn && (!repurchaseStatus || repurchaseStatus === "using") && (
-            <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.06)", border: "1px dashed rgba(160,140,128,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#C8C0B8", opacity: 0.5 }}>?</div>
-          )}
-        </div>
+    <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer", width: "100%" }} className="shelf-item">
+      <div style={{ width: "100%", height: 110, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, left: "12%", width: "28%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.45),transparent)", borderRadius: "50%", transform: "skewX(-10deg)", pointerEvents: "none" }} />
+        <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>
+        {repurchaseStatus === "repurchase" && (
+          <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.18)", border: "1px solid rgba(74,124,89,0.3)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#4A7C59" }}>↻</div>
+        )}
+        {repurchaseStatus === "not_repurchase" && (
+          <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.15)", border: "1px solid rgba(160,140,128,0.25)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#A08C80" }}>✕</div>
+        )}
+        {isOwn && (!repurchaseStatus || repurchaseStatus === "using") && (
+          <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.06)", border: "1px dashed rgba(160,140,128,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#C8C0B8", opacity: 0.5 }}>?</div>
+        )}
       </div>
-      <div style={{ padding: "6px 8px 8px", height: 52, flexShrink: 0, boxSizing: "border-box", overflow: "hidden" }}>
+      <div style={{ padding: "6px 8px 8px", height: 52, boxSizing: "border-box", overflow: "hidden" }}>
         <div style={{ fontSize: 8.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{product.brand}</div>
         <div style={{ fontSize: 11, color: "#1A1A1A", lineHeight: 1.3, marginTop: 1, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{product.name}</div>
       </div>
@@ -271,9 +269,9 @@ function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "a
           <div style={{ fontSize: 12, color: "#CCC", marginTop: 4 }}>Tap + to add your first product</div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
           {filteredActive.map((product, i) => (
-            <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0, display: "flex" }}>
+            <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0, minWidth: 0 }}>
               <CompactCard product={product} onClick={onProductClick} isOwn={isOwn} repurchaseStatus={product.status} />
             </div>
           ))}
@@ -292,9 +290,9 @@ function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "a
             <div style={{ flex: 1, height: 0.5, background: "#E8E2D9" }} />
           </div>
           {showArchive && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 8, opacity: 0.65, filter: "saturate(0.4)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, opacity: 0.65, filter: "saturate(0.4)" }}>
               {filteredArchived.map((product, i) => (
-                <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0, display: "flex" }}>
+                <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0, minWidth: 0 }}>
                   <CompactCard product={product} onClick={onProductClick} isOwn={isOwn} repurchaseStatus={product.status} />
                 </div>
               ))}
