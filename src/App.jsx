@@ -1222,6 +1222,33 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
   }, [activeCategory]);
 
   const handleTopicTap = (cat) => { setQuery(""); setActiveCategory(cat.id); };
+  const handleUserTap = async (user) => {
+  const { data } = await supabase
+    .from("user_products")
+    .select(`
+      id,
+      products (
+        id, name, image_url,
+        brands ( name ),
+        product_lines ( category )
+      )
+    `)
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .limit(20);
+
+  const products = (data || []).map(row => ({
+    id: row.products?.id,
+    name: row.products?.name || "",
+    brand: row.products?.brands?.name || "",
+    category: row.products?.product_lines?.category || "",
+    image_url: row.products?.image_url || null,
+    color: "#E8D5C4",
+    emoji: "✦",
+  }));
+
+  setSelectedUser({ ...user, products });
+};
   const clearCategory  = () => { setActiveCategory(null); setCategoryResults([]); };
   const handleAdd      = (product) => { setAddedIds(prev => new Set([...prev, product.id])); onAddProduct?.(product); };
 
@@ -1347,7 +1374,7 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
               {showPeople && userResults.length > 0 && (
                 <div style={{ paddingTop: 20 }}>
                   <SectionLabel>People</SectionLabel>
-                  {userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => setSelectedUser(user)} />)}
+{userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => handleUserTap(user)} />)}
                 </div>
               )}
             </div>
@@ -1441,7 +1468,7 @@ function UserRow({ user, index = 0, onTap }) {
   const [following, setFollowing] = useState(false);
   return (
     <div className="fade-up" onClick={onTap} style={{ display: "flex", alignItems: "center", gap: 12, background: "#FFF", borderRadius: 16, padding: "13px 14px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${index * 0.06}s`, opacity: 0, transition: "background 0.15s" }}>
-      <div style={{ width: 46, height: 46, borderRadius: "50%", background: user.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 14, fontWeight: 700, color: "#FFF", flexShrink: 0 }}>{user.avatar}</div>
+      <Avatar avatarUrl={user.avatarUrl} initials={user.avatar} size={46} />
       <div style={{ width: 36, height: 46, borderRadius: 6, overflow: "hidden", border: `2px solid ${user.cabinetTheme.cabinetBorder}`, flexShrink: 0, background: user.cabinetTheme.cabinetBg, display: "flex", flexDirection: "column" }}>
         {[0,1].map(r => (
           <div key={r} style={{ flex: 1, background: user.cabinetTheme.mirrorBg, display: "flex", alignItems: "flex-end", justifyContent: "space-around", padding: "2px" }}>
