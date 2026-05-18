@@ -229,8 +229,8 @@ const repurchaseRateFor = (id) => MOCK_REPURCHASE_RATES[id] ?? null;
 // ─── COMPACT PRODUCT CARD ────────────────────────────────────────────────────
 function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
   return (
-    <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer", display: "flex", flexDirection: "column" }} className="shelf-item">
-      <div style={{ width: "100%", paddingBottom: "118%", position: "relative", background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, overflow: "hidden", flexShrink: 0 }}>
+    <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer", display: "flex", flexDirection: "column", height: "100%" }} className="shelf-item">
+      <div style={{ flex: 1, position: "relative", background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, overflow: "hidden", minHeight: 100 }}>
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ position: "absolute", top: 0, left: "12%", width: "28%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.45),transparent)", borderRadius: "50%", transform: "skewX(-10deg)", pointerEvents: "none" }} />
           <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>
@@ -245,8 +245,8 @@ function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
           )}
         </div>
       </div>
-      <div style={{ padding: "6px 8px 8px", height: 52, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "flex-start", overflow: "hidden" }}>
-        <div style={{ fontSize: 8.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0 }}>{product.brand}</div>
+      <div style={{ padding: "6px 8px 8px", height: 52, flexShrink: 0, boxSizing: "border-box", overflow: "hidden" }}>
+        <div style={{ fontSize: 8.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{product.brand}</div>
         <div style={{ fontSize: 11, color: "#1A1A1A", lineHeight: 1.3, marginTop: 1, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{product.name}</div>
       </div>
     </div>
@@ -271,9 +271,9 @@ function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "a
           <div style={{ fontSize: 12, color: "#CCC", marginTop: 4 }}>Tap + to add your first product</div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 8 }}>
           {filteredActive.map((product, i) => (
-            <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0 }}>
+            <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0, display: "flex" }}>
               <CompactCard product={product} onClick={onProductClick} isOwn={isOwn} repurchaseStatus={product.status} />
             </div>
           ))}
@@ -292,9 +292,9 @@ function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "a
             <div style={{ flex: 1, height: 0.5, background: "#E8E2D9" }} />
           </div>
           {showArchive && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, opacity: 0.65, filter: "saturate(0.4)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 8, opacity: 0.65, filter: "saturate(0.4)" }}>
               {filteredArchived.map((product, i) => (
-                <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0 }}>
+                <div key={product.id} className="fade-up" style={{ animationDelay: `${i * 0.04}s`, opacity: 0, display: "flex" }}>
                   <CompactCard product={product} onClick={onProductClick} isOwn={isOwn} repurchaseStatus={product.status} />
                 </div>
               ))}
