@@ -200,7 +200,7 @@ function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20
       style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, overflowY: "auto", position: "relative" }}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", position: "relative" }}>
         <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
           <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
           <button onClick={onClose} aria-label="Close" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
@@ -354,14 +354,14 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
             </div>
           )}
 
-          <div style={{ width: "100%", aspectRatio: "1.4", borderRadius: 18, marginBottom: 16, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", filter: isArchived ? "saturate(0.4)" : "none" }}>
+          <div style={{ width: "100%", height: "20vh", minHeight: 130, maxHeight: 180, borderRadius: 18, marginBottom: 12, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", filter: isArchived ? "saturate(0.4)" : "none" }}>
             <div style={{ position: "absolute", top: 0, left: "10%", width: "25%", height: "50%", background: "linear-gradient(180deg,rgba(255,255,255,0.4),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
             <span style={{ fontSize: 64, position: "relative", zIndex: 1 }}>{product.emoji}</span>
           </div>
 
           <div style={{ marginBottom: 14, borderBottom: "0.5px solid #F0EDE8", paddingBottom: 14 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#BBB", fontFamily: "'DM Mono', monospace", marginBottom: 3 }}>{product.brand}</div>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: isArchived ? "#888" : "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{product.name}</div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, color: isArchived ? "#888" : "#1A1A1A", lineHeight: 1.2, marginBottom: 4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{product.name}</div>
             <div style={{ fontSize: 12, color: "#AAA" }}>{categoryLabel}{product.price ? ` · ${product.price}` : ""}</div>
           </div>
 
