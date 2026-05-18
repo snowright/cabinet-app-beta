@@ -1153,7 +1153,7 @@ function UserProfileView({ user, onBack }) {
         <button onClick={() => setFollowing(f => !f)} style={{ background: following ? "#F0EDE8" : "#1A1A1A", border: "none", borderRadius: 20, padding: "8px 18px", fontSize: 13, fontWeight: 500, color: following ? "#666" : "#FFF", transition: "all 0.2s", flexShrink: 0 }}>{following ? "Following" : "Follow"}</button>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
+      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: "calc(100px + env(safe-area-inset-bottom))" }}>
         <div style={{ padding: "24px 20px 0" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
             <div style={{ width: 64, height: 64, borderRadius: "50%", background: user.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, color: "#FFF", boxShadow: "0 4px 16px rgba(0,0,0,0.1)", flexShrink: 0 }}>{user.avatar}</div>
@@ -1515,7 +1515,7 @@ function BottomNav({ active, onChange, onAddPress }) {
   return (
     <>
       <style>{`
-        .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: rgba(253,250,247,0.97); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 0.5px solid #EDE9E3; display: flex; align-items: center; justify-content: space-around; padding: 10px 24px 0; padding-bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 50; }
+        .bottom-nav { position: fixed !important; bottom: 0 !important; left: 50% !important; transform: translateX(-50%) !important; width: 100% !important; max-width: 480px; background: rgba(253,250,247,0.97); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 0.5px solid #EDE9E3; display: flex !important; align-items: center; justify-content: space-around; padding: 10px 24px 0; padding-bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 9999 !important; will-change: transform; -webkit-transform: translateX(-50%) translateZ(0); transform: translateX(-50%) translateZ(0); }
         .nav-tab-btn { flex: 1; background: none; border: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; cursor: pointer; position: relative; -webkit-tap-highlight-color: transparent; }
         .nav-tab-btn:active { opacity: 0.6; }
         .nav-tab-indicator { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 18px; height: 2px; background: #1A1A1A; border-radius: 0 0 2px 2px; }
@@ -1890,7 +1890,7 @@ function OnboardingScreen({ user, onComplete }) {
   };
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#F7F5F2", animation: "fadeUp 0.4s ease", overflowY: "auto" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#F7F5F2", animation: "fadeUp 0.4s ease", overflowY: "auto", paddingBottom: "calc(100px + env(safe-area-inset-bottom))" }}>
       <div style={{ padding: "48px 24px 0", flex: 1 }}>
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#C8B8A2", letterSpacing: "0.15em", marginBottom: 10 }}>ALMOST THERE</div>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.15, marginBottom: 8 }}>Make it yours{user?.name ? `, ${user.name.split(" ")[0]}` : ""}</div>
@@ -2149,7 +2149,7 @@ export default function App() {
   };
 
   const shell = (children) => (
-    <div style={{ maxWidth: 480, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative", overflow: "hidden" }}>
+    <div style={{ maxWidth: 480, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", background: "#F7F5F2", position: "relative" }}>
       <GlobalStyles />
       {children}
     </div>
