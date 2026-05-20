@@ -1309,32 +1309,8 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
 
   const handleTopicTap = (cat) => { setQuery(""); setActiveCategory(cat.id); };
   const handleUserTap = async (user) => {
-  const { data } = await supabase
-    .from("user_products")
-    .select(`
-      id,
-      products (
-        id, name, image_url,
-        brands ( name ),
-        product_lines ( category )
-      )
-    `)
-    .eq("user_id", user.id)
-    .is("deleted_at", null)
-    .limit(20);
-
-  const products = (data || []).map(row => ({
-    id: row.products?.id,
-    name: row.products?.name || "",
-    brand: row.products?.brands?.name || "",
-    category: row.products?.product_lines?.category || "",
-    image_url: row.products?.image_url || null,
-    color: "#E8D5C4",
-    emoji: "✦",
-  }));
-
-  setSelectedUser({ ...user, products });
-};
+    setSelectedUser(user);
+  };
   const clearCategory  = () => { setActiveCategory(null); setCategoryResults([]); };
   const handleAdd      = (product) => { setAddedIds(prev => new Set([...prev, product.id])); onAddProduct?.(product); };
 
