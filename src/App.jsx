@@ -872,6 +872,17 @@ function EditProfileModal({ user, onClose, onUpdate }) {
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRestoreProduct, onRepurchaseChange, onSignOut, onUpdateUser, loading }) {
+  // Refresh follower/following counts from DB every time this tab mounts
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from("profiles")
+      .select("follower_count, following_count")
+      .eq("id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data) onUpdateUser({ ...user, followerCount: data.follower_count || 0, followingCount: data.following_count || 0 });
+      });
+  }, [user?.id]);
   const [showThemePicker,  setShowThemePicker]  = useState(false);
   const [showEditProfile,  setShowEditProfile]  = useState(false);
   const [selectedProduct,  setSelectedProduct]  = useState(null);
@@ -1146,72 +1157,45 @@ function UserProfileView({ user, onBack, currentUserId }) {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Check if current user already follows this user
+  // Check follow state + refresh live counts on mount
   useEffect(() => {
-    if (!currentUserId || !user.id) return;
-    async function checkFollow() {
-      const { data } = await supabase
-        .from("follows")
-        .select("id")
-        .eq("follower_id", currentUserId)
-        .eq("following_id", user.id)
-        .maybeSingle();
-      setFollowing(!!data);
-    }
-    checkFollow();
-  }, [currentUserId, user.id]);
+    if (!user.id) return;
+    // Refresh live follower count
+    supabase.from("profiles").select("follower_count, following_count").eq("id", user.id).single()
+      .then(({ data }) => { if (data) setFollowerCount(data.follower_count || 0); });
+    // Check if already following
+    if (!currentUserId) return;
+    supabase.from("follows").select("*", { count: "exact", head: true })
+      .eq("follower_id", currentUserId).eq("following_id", user.id)
+      .then(({ count }) => setFollowing(count > 0));
+  }, [user.id, currentUserId]);
 
-  // Fetch this user's products
+  // Fetch products
   useEffect(() => {
-    async function fetchProducts() {
-      const { data } = await supabase
-        .from("user_products")
-        .select(`
-          id, status,
-          products (
-            id, name, image_url,
-            brands ( name ),
-            product_lines ( category )
-          )
-        `)
-        .eq("user_id", user.id)
-        .is("deleted_at", null)
-        .limit(50);
-
-      const mapped = (data || []).map(row => ({
-        id:        row.products?.id,
-        name:      row.products?.name || "",
-        brand:     row.products?.brands?.name || "",
-        category:  row.products?.product_lines?.category || "",
-        image_url: row.products?.image_url || null,
-        status:    row.status || "active",
-        color:     "#E8D5C4",
-        emoji:     "✦",
-      }));
-      setProducts(mapped);
-      setLoadingProducts(false);
-    }
-    fetchProducts();
+    if (!user.id) return;
+    supabase.from("user_products").select(`id, status, products ( id, name, image_url, brands ( name ), product_lines ( category ) )`)
+      .eq("user_id", user.id).is("deleted_at", null).limit(50)
+      .then(({ data }) => {
+        setProducts((data || []).map(row => ({
+          id: row.products?.id, name: row.products?.name || "",
+          brand: row.products?.brands?.name || "",
+          category: row.products?.product_lines?.category || "",
+          image_url: row.products?.image_url || null,
+          status: row.status || "active", color: "#E8D5C4", emoji: "✦",
+        })));
+        setLoadingProducts(false);
+      });
   }, [user.id]);
 
   const handleFollowToggle = async () => {
     if (!currentUserId || loadingFollow) return;
     setLoadingFollow(true);
-
     if (following) {
-      // Unfollow
-      await supabase
-        .from("follows")
-        .delete()
-        .eq("follower_id", currentUserId)
-        .eq("following_id", user.id);
+      await supabase.from("follows").delete().eq("follower_id", currentUserId).eq("following_id", user.id);
       setFollowing(false);
       setFollowerCount(c => Math.max(0, c - 1));
     } else {
-      // Follow
-      await supabase
-        .from("follows")
-        .insert({ follower_id: currentUserId, following_id: user.id });
+      await supabase.from("follows").insert({ follower_id: currentUserId, following_id: user.id });
       setFollowing(true);
       setFollowerCount(c => c + 1);
     }
@@ -1238,11 +1222,7 @@ function UserProfileView({ user, onBack, currentUserId }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: "#888", lineHeight: 1.5, marginBottom: 12 }}>{user.bio}</div>
               <div style={{ display: "flex", gap: 20 }}>
-                {[
-                  { label: "products",  val: loadingProducts ? "—" : products.length },
-                  { label: "followers", val: followerCount.toLocaleString() },
-                  { label: "following", val: user.following || 0 }
-                ].map(s => (
+                {[{ label: "products", val: loadingProducts ? "—" : products.length }, { label: "followers", val: followerCount }, { label: "following", val: user.following || 0 }].map(s => (
                   <div key={s.label}>
                     <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{s.val}</div>
                     <div style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{s.label}</div>
@@ -1265,7 +1245,7 @@ function UserProfileView({ user, onBack, currentUserId }) {
         )}
         {tab === "posts" && (
           <div style={{ padding: "0 16px" }}>
-            {(user.posts || []).length === 0 ? (
+            {user.posts.length === 0 ? (
               <div style={{ textAlign: "center", padding: "48px 0", color: "#CCC" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>✦</div>
                 <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 16 }}>No posts yet</div>
@@ -1309,8 +1289,32 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
 
   const handleTopicTap = (cat) => { setQuery(""); setActiveCategory(cat.id); };
   const handleUserTap = async (user) => {
-    setSelectedUser(user);
-  };
+  const { data } = await supabase
+    .from("user_products")
+    .select(`
+      id,
+      products (
+        id, name, image_url,
+        brands ( name ),
+        product_lines ( category )
+      )
+    `)
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .limit(20);
+
+  const products = (data || []).map(row => ({
+    id: row.products?.id,
+    name: row.products?.name || "",
+    brand: row.products?.brands?.name || "",
+    category: row.products?.product_lines?.category || "",
+    image_url: row.products?.image_url || null,
+    color: "#E8D5C4",
+    emoji: "✦",
+  }));
+
+  setSelectedUser({ ...user, products });
+};
   const clearCategory  = () => { setActiveCategory(null); setCategoryResults([]); };
   const handleAdd      = (product) => { setAddedIds(prev => new Set([...prev, product.id])); onAddProduct?.(product); };
 
@@ -2221,7 +2225,7 @@ export default function App() {
 
   return shell(<>
     {activeTab === "feed"     && <FeedTab currentUserId={authedUser?.id} />}
-    {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} currentUserId={authedUser?.id} />}
+    {activeTab === "discover" && <DiscoverTab myProducts={myProducts} onAddProduct={handleAddProduct} currentUserId={authedUser?.id} onFollowChange={(delta) => setAuthedUser(u => ({ ...u, followingCount: Math.max(0, (u.followingCount || 0) + delta) }))} />}
     {activeTab === "cabinet"  && <ProfileTab user={authedUser} products={myProducts} theme={cabinetTheme} onThemeChange={handleThemeChange} onAddProduct={handleAddProduct} onRemoveProduct={handleRemoveProduct} onRestoreProduct={handleRestoreProduct} onRepurchaseChange={handleRepurchaseChange} onSignOut={handleSignOut} onUpdateUser={u => setAuthedUser(u)} loading={loadingCabinet} />}
     {showAddModal && <AddProductModal onClose={() => setShowAddModal(false)} onAdd={handleAddProduct} />}
     <BottomNav active={activeTab} onChange={setActiveTab} onAddPress={() => setShowAddModal(true)} />
