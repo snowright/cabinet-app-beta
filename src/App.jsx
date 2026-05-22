@@ -265,8 +265,8 @@ function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "a
       {filteredActive.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}>✦</div>
-          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 16, color: "#BBB" }}>{activeFilter !== "all" ? "Nothing in this category yet" : "Your cabinet is empty"}</div>
-          <div style={{ fontSize: 12, color: "#CCC", marginTop: 4 }}>Tap + to add your first product</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 16, color: "#BBB" }}>{activeFilter !== "all" ? "Nothing in this category yet" : isOwn ? "Your cabinet is empty" : "Nothing here yet"}</div>
+          {isOwn && <div style={{ fontSize: 12, color: "#CCC", marginTop: 4 }}>Tap + to add your first product</div>}
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
@@ -1137,7 +1137,7 @@ function FeedEmptyState() {
 }
 
 // ─── USER PROFILE VIEW ───────────────────────────────────────────────────────
-function UserProfileView({ user, onBack, currentUserId }) {
+function UserProfileView({ user, onBack, currentUserId, onFollowChange }) {
   const [tab, setTab]                         = useState("cabinet");
   const [following, setFollowing]             = useState(false);
   const [followerCount, setFollowerCount]     = useState(user.followers || 0);
@@ -1149,16 +1149,15 @@ function UserProfileView({ user, onBack, currentUserId }) {
   // Check if current user already follows this user
   useEffect(() => {
     if (!currentUserId || !user.id) return;
-    async function checkFollow() {
-      const { data } = await supabase
-        .from("follows")
-        .select("id")
-        .eq("follower_id", currentUserId)
-        .eq("following_id", user.id)
-        .maybeSingle();
-      setFollowing(!!data);
-    }
-    checkFollow();
+    supabase
+      .from("follows")
+      .select("follower_id", { count: "exact", head: true })
+      .eq("follower_id", currentUserId)
+      .eq("following_id", user.id)
+      .then(({ count, error }) => {
+        if (error) console.warn("[checkFollow]", error.message);
+        else setFollowing(count > 0);
+      });
   }, [currentUserId, user.id]);
 
   // Fetch this user's products
@@ -1207,6 +1206,7 @@ function UserProfileView({ user, onBack, currentUserId }) {
         .eq("following_id", user.id);
       setFollowing(false);
       setFollowerCount(c => Math.max(0, c - 1));
+      onFollowChange?.(user.id, false);
     } else {
       // Follow
       await supabase
@@ -1214,6 +1214,7 @@ function UserProfileView({ user, onBack, currentUserId }) {
         .insert({ follower_id: currentUserId, following_id: user.id });
       setFollowing(true);
       setFollowerCount(c => c + 1);
+      onFollowChange?.(user.id, true);
     }
     setLoadingFollow(false);
   };
@@ -1375,7 +1376,7 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId, onFollowCha
   const showProducts = activeFilter === "all" || activeFilter === "products";
   const showTopics   = activeFilter === "all" || activeFilter === "topics";
 
-  if (selectedUser) return <UserProfileView user={selectedUser} onBack={() => setSelectedUser(null)} currentUserId={currentUserId} />;
+  if (selectedUser) return <UserProfileView user={selectedUser} onBack={() => setSelectedUser(null)} currentUserId={currentUserId} onFollowChange={(userId, isNowFollowing) => { setFollowedIds(prev => { const s = new Set(prev); isNowFollowing ? s.add(userId) : s.delete(userId); return s; }); onFollowChange?.(isNowFollowing ? 1 : -1); }} />;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
