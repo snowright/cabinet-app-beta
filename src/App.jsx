@@ -872,17 +872,6 @@ function EditProfileModal({ user, onClose, onUpdate }) {
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemoveProduct, onRestoreProduct, onRepurchaseChange, onSignOut, onUpdateUser, loading }) {
-  // Refresh follower/following counts from DB every time this tab mounts
-  useEffect(() => {
-    if (!user?.id) return;
-    supabase.from("profiles")
-      .select("follower_count, following_count")
-      .eq("id", user.id)
-      .single()
-      .then(({ data }) => {
-        if (data) onUpdateUser({ ...user, followerCount: data.follower_count || 0, followingCount: data.following_count || 0 });
-      });
-  }, [user?.id]);
   const [showThemePicker,  setShowThemePicker]  = useState(false);
   const [showEditProfile,  setShowEditProfile]  = useState(false);
   const [selectedProduct,  setSelectedProduct]  = useState(null);
@@ -1157,45 +1146,72 @@ function UserProfileView({ user, onBack, currentUserId }) {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Check follow state + refresh live counts on mount
+  // Check if current user already follows this user
   useEffect(() => {
-    if (!user.id) return;
-    // Refresh live follower count
-    supabase.from("profiles").select("follower_count, following_count").eq("id", user.id).single()
-      .then(({ data }) => { if (data) setFollowerCount(data.follower_count || 0); });
-    // Check if already following
-    if (!currentUserId) return;
-    supabase.from("follows").select("*", { count: "exact", head: true })
-      .eq("follower_id", currentUserId).eq("following_id", user.id)
-      .then(({ count }) => setFollowing(count > 0));
-  }, [user.id, currentUserId]);
+    if (!currentUserId || !user.id) return;
+    async function checkFollow() {
+      const { data } = await supabase
+        .from("follows")
+        .select("id")
+        .eq("follower_id", currentUserId)
+        .eq("following_id", user.id)
+        .maybeSingle();
+      setFollowing(!!data);
+    }
+    checkFollow();
+  }, [currentUserId, user.id]);
 
-  // Fetch products
+  // Fetch this user's products
   useEffect(() => {
-    if (!user.id) return;
-    supabase.from("user_products").select(`id, status, products ( id, name, image_url, brands ( name ), product_lines ( category ) )`)
-      .eq("user_id", user.id).is("deleted_at", null).limit(50)
-      .then(({ data }) => {
-        setProducts((data || []).map(row => ({
-          id: row.products?.id, name: row.products?.name || "",
-          brand: row.products?.brands?.name || "",
-          category: row.products?.product_lines?.category || "",
-          image_url: row.products?.image_url || null,
-          status: row.status || "active", color: "#E8D5C4", emoji: "✦",
-        })));
-        setLoadingProducts(false);
-      });
+    async function fetchProducts() {
+      const { data } = await supabase
+        .from("user_products")
+        .select(`
+          id, status,
+          products (
+            id, name, image_url,
+            brands ( name ),
+            product_lines ( category )
+          )
+        `)
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .limit(50);
+
+      const mapped = (data || []).map(row => ({
+        id:        row.products?.id,
+        name:      row.products?.name || "",
+        brand:     row.products?.brands?.name || "",
+        category:  row.products?.product_lines?.category || "",
+        image_url: row.products?.image_url || null,
+        status:    row.status || "active",
+        color:     "#E8D5C4",
+        emoji:     "✦",
+      }));
+      setProducts(mapped);
+      setLoadingProducts(false);
+    }
+    fetchProducts();
   }, [user.id]);
 
   const handleFollowToggle = async () => {
     if (!currentUserId || loadingFollow) return;
     setLoadingFollow(true);
+
     if (following) {
-      await supabase.from("follows").delete().eq("follower_id", currentUserId).eq("following_id", user.id);
+      // Unfollow
+      await supabase
+        .from("follows")
+        .delete()
+        .eq("follower_id", currentUserId)
+        .eq("following_id", user.id);
       setFollowing(false);
       setFollowerCount(c => Math.max(0, c - 1));
     } else {
-      await supabase.from("follows").insert({ follower_id: currentUserId, following_id: user.id });
+      // Follow
+      await supabase
+        .from("follows")
+        .insert({ follower_id: currentUserId, following_id: user.id });
       setFollowing(true);
       setFollowerCount(c => c + 1);
     }
@@ -1222,7 +1238,11 @@ function UserProfileView({ user, onBack, currentUserId }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: "#888", lineHeight: 1.5, marginBottom: 12 }}>{user.bio}</div>
               <div style={{ display: "flex", gap: 20 }}>
-                {[{ label: "products", val: loadingProducts ? "—" : products.length }, { label: "followers", val: followerCount }, { label: "following", val: user.following || 0 }].map(s => (
+                {[
+                  { label: "products",  val: loadingProducts ? "—" : products.length },
+                  { label: "followers", val: followerCount.toLocaleString() },
+                  { label: "following", val: user.following || 0 }
+                ].map(s => (
                   <div key={s.label}>
                     <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, fontWeight: 600, color: "#1A1A1A", lineHeight: 1 }}>{s.val}</div>
                     <div style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{s.label}</div>
@@ -1245,7 +1265,7 @@ function UserProfileView({ user, onBack, currentUserId }) {
         )}
         {tab === "posts" && (
           <div style={{ padding: "0 16px" }}>
-            {user.posts.length === 0 ? (
+            {(user.posts || []).length === 0 ? (
               <div style={{ textAlign: "center", padding: "48px 0", color: "#CCC" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>✦</div>
                 <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 16 }}>No posts yet</div>
@@ -1260,7 +1280,7 @@ function UserProfileView({ user, onBack, currentUserId }) {
 }
 
 // ─── DISCOVER TAB ─────────────────────────────────────────────────────────────
-function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
+function DiscoverTab({ myProducts = [], onAddProduct, currentUserId, onFollowChange }) {
   const [query, setQuery]                 = useState("");
   const [activeFilter, setActiveFilter]   = useState("all");
   const [selectedUser, setSelectedUser]   = useState(null);
@@ -1268,7 +1288,32 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
   const [categoryResults, setCategoryResults] = useState([]);
   const [addedIds, setAddedIds]           = useState(new Set(myProducts.map(p => p.id)));
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [followedIds, setFollowedIds]     = useState(new Set());
   const inputRef = useRef(null);
+
+  // Load existing follows on mount
+  useEffect(() => {
+    if (!currentUserId) return;
+    supabase.from("follows").select("following_id").eq("follower_id", currentUserId)
+      .then(({ data }) => {
+        if (data) setFollowedIds(new Set(data.map(r => r.following_id)));
+      });
+  }, [currentUserId]);
+
+  const handleFollowFromRow = async (e, userId) => {
+    e.stopPropagation();
+    if (!currentUserId) return;
+    const isFollowing = followedIds.has(userId);
+    if (isFollowing) {
+      await supabase.from("follows").delete().eq("follower_id", currentUserId).eq("following_id", userId);
+      setFollowedIds(prev => { const s = new Set(prev); s.delete(userId); return s; });
+      onFollowChange?.(-1);
+    } else {
+      await supabase.from("follows").insert({ follower_id: currentUserId, following_id: userId });
+      setFollowedIds(prev => new Set([...prev, userId]));
+      onFollowChange?.(1);
+    }
+  };
 
   const { results: productResults, searching } = useProductSearch(query);
 
@@ -1289,32 +1334,8 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
 
   const handleTopicTap = (cat) => { setQuery(""); setActiveCategory(cat.id); };
   const handleUserTap = async (user) => {
-  const { data } = await supabase
-    .from("user_products")
-    .select(`
-      id,
-      products (
-        id, name, image_url,
-        brands ( name ),
-        product_lines ( category )
-      )
-    `)
-    .eq("user_id", user.id)
-    .is("deleted_at", null)
-    .limit(20);
-
-  const products = (data || []).map(row => ({
-    id: row.products?.id,
-    name: row.products?.name || "",
-    brand: row.products?.brands?.name || "",
-    category: row.products?.product_lines?.category || "",
-    image_url: row.products?.image_url || null,
-    color: "#E8D5C4",
-    emoji: "✦",
-  }));
-
-  setSelectedUser({ ...user, products });
-};
+    setSelectedUser(user);
+  };
   const clearCategory  = () => { setActiveCategory(null); setCategoryResults([]); };
   const handleAdd      = (product) => { setAddedIds(prev => new Set([...prev, product.id])); onAddProduct?.(product); };
 
@@ -1440,7 +1461,7 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId }) {
               {showPeople && userResults.length > 0 && (
                 <div style={{ paddingTop: 20 }}>
                   <SectionLabel>People</SectionLabel>
-{userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => handleUserTap(user)} />)}
+{userResults.map((user, i) => <UserRow key={user.id} user={user} index={i} onTap={() => handleUserTap(user)} isFollowing={followedIds.has(user.id)} onFollowToggle={(e) => handleFollowFromRow(e, user.id)} />)}
                 </div>
               )}
             </div>
@@ -1530,24 +1551,16 @@ function SectionLabel({ children }) {
 }
 
 // ─── USER ROW ────────────────────────────────────────────────────────────────
-function UserRow({ user, index = 0, onTap }) {
-  const [following, setFollowing] = useState(false);
+function UserRow({ user, index = 0, onTap, isFollowing = false, onFollowToggle }) {
   return (
     <div className="fade-up" onClick={onTap} style={{ display: "flex", alignItems: "center", gap: 12, background: "#FFF", borderRadius: 16, padding: "13px 14px", marginBottom: 8, border: "1.5px solid #EDE9E3", cursor: "pointer", animationDelay: `${index * 0.06}s`, opacity: 0, transition: "background 0.15s" }}>
       <Avatar avatarUrl={user.avatarUrl} initials={user.avatar} size={46} />
-      <div style={{ width: 36, height: 46, borderRadius: 6, overflow: "hidden", border: `2px solid ${user.cabinetTheme.cabinetBorder}`, flexShrink: 0, background: user.cabinetTheme.cabinetBg, display: "flex", flexDirection: "column" }}>
-        {[0,1].map(r => (
-          <div key={r} style={{ flex: 1, background: user.cabinetTheme.mirrorBg, display: "flex", alignItems: "flex-end", justifyContent: "space-around", padding: "2px" }}>
-            {user.products.slice(r*2, r*2+2).map((p,i) => <div key={i} style={{ width: 8, height: 12, background: p?.color || "transparent", borderRadius: 2 }} />)}
-          </div>
-        ))}
-      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A" }}>{user.name}</div>
         <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono', monospace" }}>{user.handle}</div>
-        <div style={{ fontSize: 11, color: "#BBB", marginTop: 2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{user.products.length} products</div>
+        <div style={{ fontSize: 11, color: "#BBB", marginTop: 2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{user.bio || ""}</div>
       </div>
-      <button onClick={e => { e.stopPropagation(); setFollowing(f => !f); }} style={{ background: following ? "#F0EDE8" : "#1A1A1A", border: "none", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: following ? "#666" : "#FFF", flexShrink: 0, transition: "all 0.2s" }}>{following ? "✓" : "+ Follow"}</button>
+      <button onClick={onFollowToggle} style={{ background: isFollowing ? "#F0EDE8" : "#1A1A1A", border: "none", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: isFollowing ? "#666" : "#FFF", flexShrink: 0, transition: "all 0.2s" }}>{isFollowing ? "✓" : "+ Follow"}</button>
     </div>
   );
 }
