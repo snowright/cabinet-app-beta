@@ -6,9 +6,9 @@ const API_SECRET = process.env.CLOUDINARY_API_SECRET;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchProducts(offset = 0, limit = 10) {
+async function fetchNextBatch() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/products?select=id,name,image_url,product_lines(name,brands(name))&image_url=not.is.null&limit=${limit}&offset=${offset}`,
+    `${SUPABASE_URL}/rest/v1/products?select=id,name,image_url,product_lines(name,brands(name))&image_url=like.*sephora*&limit=10`,
     {
       headers: {
         apikey: SUPABASE_KEY,
@@ -17,24 +17,34 @@ async function fetchProducts(offset = 0, limit = 10) {
     }
   );
   if (!res.ok) throw new Error(`Supabase fetch failed: ${await res.text()}`);
-  const data = await res.json();
-  // Only process products that still have Sephora URLs (not yet migrated to Cloudinary)
-  return data.filter(p => p.image_url && p.image_url.includes('sephora.com'));
+  return res.json();
+}
+
+async function countRemaining() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/products?select=id&image_url=like.*sephora*`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Prefer: 'count=exact',
+        'Range-Unit': 'items',
+        Range: '0-0',
+      },
+    }
+  );
+  const range = res.headers.get('content-range');
+  if (range) {
+    const match = range.match(/\/(\d+)$/);
+    return match ? parseInt(match[1]) : null;
+  }
+  return null;
 }
 
 async function uploadToCloudinary(imageUrl, publicId) {
-  // Use Cloudinary's fetch/upload API to pull from Sephora and re-host
-  const formData = new URLSearchParams();
-  formData.append('file', imageUrl);
-  formData.append('public_id', publicId);
-  formData.append('folder', 'cabinet-products');
-  formData.append('overwrite', 'false');
-
-  // Generate auth signature
   const timestamp = Math.round(Date.now() / 1000);
   const str = `folder=cabinet-products&overwrite=false&public_id=${publicId}&timestamp=${timestamp}${API_SECRET}`;
-  
-  // Use crypto for signature
+
   const encoder = new TextEncoder();
   const data = encoder.encode(str);
   const hashBuffer = await crypto.subtle.digest('SHA-1', data);
@@ -53,10 +63,7 @@ async function uploadToCloudinary(imageUrl, publicId) {
 
   const res = await fetch(
     `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-    {
-      method: 'POST',
-      body,
-    }
+    { method: 'POST', body }
   );
 
   const json = await res.json();
@@ -86,17 +93,14 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const offset = parseInt(req.query.offset || '0', 10);
-  const limit = 10;
-
   try {
-    const products = await fetchProducts(offset, limit);
+    const products = await fetchNextBatch();
+    const remaining = await countRemaining();
 
     if (products.length === 0) {
       return res.status(200).json({
-        message: '✅ All done! No more Sephora images to migrate.',
-        offset,
-        processed: 0,
+        message: '✅ All done! All images migrated to Cloudinary.',
+        remaining: 0,
       });
     }
 
@@ -111,26 +115,31 @@ export default async function handler(req, res) {
         await updateImageUrl(p.id, cloudinaryUrl);
         results.success.push({ name: p.name, url: cloudinaryUrl });
       } catch (err) {
+        // If upload failed, update with a placeholder so it doesn't block the queue
+        // but only for "Resource not found" errors (bad Sephora SKU)
+        if (err.message.includes('Resource not found')) {
+          await updateImageUrl(p.id, 'NEEDS_MANUAL_IMAGE');
+        }
         results.failed.push({ name: p.name, reason: err.message });
       }
 
       await sleep(300);
     }
 
-    const nextOffset = offset + limit;
+    const remainingAfter = (remaining || 0) - results.success.length;
 
     return res.status(200).json({
-      offset,
       processed: products.length,
       success: results.success.length,
       failed: results.failed.length,
+      remainingAfter: Math.max(0, remainingAfter),
       failedProducts: results.failed,
-      next: products.length === limit
-        ? `https://cabinetappbeta.vercel.app/api/migrate-images?secret=cabinet&offset=${nextOffset}`
+      next: remainingAfter > 0
+        ? `https://cabinetappbeta.vercel.app/api/migrate-images?secret=cabinet`
         : null,
-      message: products.length === limit
-        ? `✓ Batch done. Visit the 'next' URL to continue.`
-        : `✓ All Sephora images migrated to Cloudinary!`,
+      message: remainingAfter > 0
+        ? `✓ Batch done. ~${Math.max(0, remainingAfter)} remaining. Click 'next' to continue.`
+        : `✅ All done!`,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
