@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { supabase } from "./lib/supabase";
+import { supabase } from "./lib/supabase";id,name,image_url
+676bfe28-d638-5dcd-945e-e7d2369c9c90,Lip Sleeping Mask Original 0.7 oz,https://res.cloudinary.com/dp2r3kmwk/image/upload/v1779489589/cabinet-products/laneige-676bfe28-d638-5dcd-945e-e7d2369c9c90.jpg
+91dc4206-00b4-55ed-85ca-46f4ec464a28,Lip Sleeping Mask Vanilla 0.7 oz,https://res.cloudinary.com/dp2r3kmwk/image/upload/v1779489589/cabinet-products/laneige-91dc4206-00b4-55ed-85ca-46f4ec464a28.jpg
+e722ade5-04bf-5d95-b873-8f8e8ac7431c,The Water Cream 2.46 oz,https://res.cloudinary.com/dp2r3kmwk/image/upload/v1779489590/cabinet-products/tatcha-e722ade5-04bf-5d95-b873-8f8e8ac7431c.jpg
 
 // ─── FONTS & GLOBAL STYLES ───────────────────────────────────────────────────
 const GlobalStyles = () => (
@@ -2155,7 +2158,7 @@ export default function App() {
         seen.add(up.product_id);
         const p = up.products;
         const pl = p.product_lines;
-        products.push({ id: p.id, user_product_id: up.id, name: pl?.name || p.name, sku: p.name, brand: pl?.brands?.name || "", category: pl?.category || "other", price: p.price_usd ? `$${p.price_usd}` : "", emoji: categoryEmoji(pl?.category), color: categoryColor(pl?.category), status: up.status, addedAt: up.created_at });
+        products.push({ id: p.id, user_product_id: up.id, name: pl?.name || p.name, sku: p.name, brand: pl?.brands?.name || "", category: pl?.category || "other", price: p.price_usd ? `$${p.price_usd}` : "", image_url: p.image_url, emoji: categoryEmoji(pl?.category), color: categoryColor(pl?.category), status: up.status, addedAt: up.created_at });
       }
       setMyProducts(products);
     }
