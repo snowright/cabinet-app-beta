@@ -1,8 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { supabase } from "./lib/supabase";id,name,image_url
-676bfe28-d638-5dcd-945e-e7d2369c9c90,Lip Sleeping Mask Original 0.7 oz,https://res.cloudinary.com/dp2r3kmwk/image/upload/v1779489589/cabinet-products/laneige-676bfe28-d638-5dcd-945e-e7d2369c9c90.jpg
-91dc4206-00b4-55ed-85ca-46f4ec464a28,Lip Sleeping Mask Vanilla 0.7 oz,https://res.cloudinary.com/dp2r3kmwk/image/upload/v1779489589/cabinet-products/laneige-91dc4206-00b4-55ed-85ca-46f4ec464a28.jpg
-e722ade5-04bf-5d95-b873-8f8e8ac7431c,The Water Cream 2.46 oz,https://res.cloudinary.com/dp2r3kmwk/image/upload/v1779489590/cabinet-products/tatcha-e722ade5-04bf-5d95-b873-8f8e8ac7431c.jpg
+import { supabase } from "./lib/supabase";
 
 // ─── FONTS & GLOBAL STYLES ───────────────────────────────────────────────────
 const GlobalStyles = () => (
@@ -235,7 +232,9 @@ function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
     <div onClick={() => onClick(product)} style={{ background: "#FFF", borderRadius: 12, overflow: "hidden", border: "1px solid #EDE9E3", cursor: "pointer", width: "100%" }} className="shelf-item">
       <div style={{ width: "100%", height: 110, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: 0, left: "12%", width: "28%", height: "55%", background: "linear-gradient(180deg,rgba(255,255,255,0.45),transparent)", borderRadius: "50%", transform: "skewX(-10deg)", pointerEvents: "none" }} />
-        <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>
+        {product.image_url
+          ? <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }} onError={e => { e.target.style.display = "none"; }} />
+          : <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>}
         {repurchaseStatus === "repurchase" && (
           <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.18)", border: "1px solid rgba(74,124,89,0.3)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#4A7C59" }}>↻</div>
         )}
