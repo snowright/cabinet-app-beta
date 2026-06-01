@@ -5,9 +5,10 @@ const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchAllProducts() {
+async function fetchProducts(offset = 0, limit = 20) {
+  // Fetch ALL products regardless of image_url status
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/products?select=id,name,image_url,product_lines(name,brands(name))&image_url=is.null&limit=1000`,
+    `${SUPABASE_URL}/rest/v1/products?select=id,name,image_url,product_lines(name,brands(name))&limit=${limit}&offset=${offset}`,
     {
       headers: {
         apikey: SUPABASE_KEY,
@@ -38,7 +39,6 @@ async function searchImage(query) {
   const items = json.items || [];
   if (items.length === 0) return null;
 
-  // Prefer square-ish product shots
   const best = items.find((item) => {
     const w = item.image?.width || 0;
     const h = item.image?.height || 0;
@@ -67,46 +67,60 @@ async function updateImageUrl(productId, imageUrl) {
 }
 
 export default async function handler(req, res) {
-  // Simple auth check — only run if ?secret=cabinet matches
   if (req.query.secret !== "cabinet") {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  const offset = parseInt(req.query.offset || "0", 10);
+  const limit = 20;
+
   try {
-    const products = await fetchAllProducts();
-    console.log(`Found ${products.length} products with no image_url`);
+    const products = await fetchProducts(offset, limit);
+
+    if (products.length === 0) {
+      return res.status(200).json({
+        message: "✅ All done!",
+        offset,
+        processed: 0,
+      });
+    }
 
     const results = { success: [], failed: [] };
 
     for (const p of products) {
       const brandName = p.product_lines?.brands?.name || "";
       const lineName = p.product_lines?.name || "";
-      const query = `${brandName} ${lineName} product`.trim();
+      const query = `${brandName} ${lineName} product official`.trim();
 
       try {
         const imageUrl = await searchImage(query);
         if (imageUrl) {
           await updateImageUrl(p.id, imageUrl);
           results.success.push({ query, imageUrl });
-          console.log(`✓ ${query}`);
         } else {
           results.failed.push({ query, reason: "no image found" });
-          console.log(`✗ ${query}`);
         }
       } catch (err) {
         results.failed.push({ query, reason: err.message });
-        console.log(`✗ ${query}: ${err.message}`);
       }
 
-      // 300ms between requests — stay under Google rate limits
-      await sleep(300);
+      await sleep(250);
     }
 
+    const nextOffset = offset + limit;
+
     return res.status(200).json({
-      total: products.length,
+      offset,
+      processed: products.length,
       success: results.success.length,
       failed: results.failed.length,
       failedProducts: results.failed,
+      next: products.length === limit
+        ? `https://cabinetappbeta.vercel.app/api/fetch-images?secret=cabinet&offset=${nextOffset}`
+        : null,
+      message: products.length === limit
+        ? `✓ Batch done. Click 'next' to continue.`
+        : `✅ All products processed!`,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
