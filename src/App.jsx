@@ -142,7 +142,7 @@ function useProductSearch(query) {
     const timer = setTimeout(async () => {
       const isBlackOwned = BLACK_OWNED_TERMS.some(t => q.includes(t));
       const isIndie      = INDIE_TERMS.some(t => q.includes(t));
-      const baseSelect   = "id, name, category, brand_id, brands ( name ), products ( id, name, price_usd )";
+      const baseSelect   = "id, name, category, brand_id, brands ( name ), products ( id, name, price_usd, image_url )";
 
       const brandQueries = [
         supabase.from("brands").select("id").ilike("name", `%${q}%`),
@@ -178,6 +178,7 @@ function useProductSearch(query) {
             brand:    pl.brands?.name || "",
             category: pl.category,
             price:    pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
+            image_url: pl.products[0].image_url || null,
             emoji:    categoryEmoji(pl.category),
             color:    categoryColor(pl.category),
           });
@@ -356,9 +357,13 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
             </div>
           )}
 
-          <div style={{ width: "100%", height: "20vh", minHeight: 130, maxHeight: 180, borderRadius: 18, marginBottom: 12, background: `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", filter: isArchived ? "saturate(0.4)" : "none" }}>
-            <div style={{ position: "absolute", top: 0, left: "10%", width: "25%", height: "50%", background: "linear-gradient(180deg,rgba(255,255,255,0.4),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
-            <span style={{ fontSize: 64, position: "relative", zIndex: 1 }}>{product.emoji}</span>
+          <div style={{ width: "100%", height: "20vh", minHeight: 130, maxHeight: 180, borderRadius: 18, marginBottom: 12, background: product.image_url ? "#FFFFFF" : `linear-gradient(145deg, ${product.color}FF, ${product.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", filter: isArchived ? "saturate(0.4)" : "none" }}>
+            {product.image_url
+              ? <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "contain", position: "absolute", inset: 0 }} onError={e => { e.target.style.display = "none"; }} />
+              : <>
+                  <div style={{ position: "absolute", top: 0, left: "10%", width: "25%", height: "50%", background: "linear-gradient(180deg,rgba(255,255,255,0.4),transparent)", borderRadius: "50%", transform: "skewX(-10deg)" }} />
+                  <span style={{ fontSize: 64, position: "relative", zIndex: 1 }}>{product.emoji}</span>
+                </>}
           </div>
 
           <div style={{ marginBottom: 14, borderBottom: "0.5px solid #F0EDE8", paddingBottom: 14 }}>
@@ -468,12 +473,13 @@ function AddProductModal({ onClose, onAdd }) {
   useEffect(() => {
     if (!selectedCategory) { setBrowseProducts([]); return; }
     supabase.from("product_lines")
-      .select("id, name, category, brands ( name ), products ( id, name, price_usd )")
+      .select("id, name, category, brands ( name ), products ( id, name, price_usd, image_url )")
       .eq("category", selectedCategory).limit(20)
       .then(({ data }) => {
         setBrowseProducts((data || []).filter(pl => pl.products?.length > 0).map(pl => ({
           id: pl.products[0].id, name: pl.name, brand: pl.brands?.name || "",
           category: pl.category, price: pl.products[0].price_usd ? `$${pl.products[0].price_usd}` : "",
+          image_url: pl.products[0].image_url || null,
           emoji: categoryEmoji(pl.category), color: categoryColor(pl.category),
         })));
       });
@@ -1098,6 +1104,7 @@ async function loadFeed(userId, categoryFilter = "all") {
         brand:    pl?.brands?.name || "",
         category: cat,
         price:    row.products.price_usd ? `$${row.products.price_usd}` : "",
+        image_url: row.products.image_url || null,
         emoji:    categoryEmoji(cat),
         color:    categoryColor(cat),
       },
@@ -1325,12 +1332,12 @@ function DiscoverTab({ myProducts = [], onAddProduct, currentUserId, onFollowCha
   useEffect(() => {
     if (!activeCategory) { setCategoryResults([]); return; }
     supabase.from("product_lines")
-      .select("id, name, category, brands ( name ), products ( id, name, price_usd )")
+      .select("id, name, category, brands ( name ), products ( id, name, price_usd, image_url )")
       .eq("category", activeCategory).limit(20)
       .then(({ data }) => {
         setCategoryResults((data || []).filter(pl => pl.products?.length > 0).map(pl => ({
           id: pl.products[0].id, name: pl.name, brand: pl.brands?.name || "",
-          category: pl.category, emoji: categoryEmoji(pl.category), color: categoryColor(pl.category),
+          category: pl.category, image_url: pl.products[0].image_url || null, emoji: categoryEmoji(pl.category), color: categoryColor(pl.category),
         })));
       });
   }, [activeCategory]);
