@@ -2084,6 +2084,8 @@ function AuthGate({ onAuthenticated }) {
   const [checking, setChecking]     = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const hash = window.location.hash;
     if (hash.includes("type=recovery")) {
       setChecking(false);
@@ -2091,35 +2093,59 @@ function AuthGate({ onAuthenticated }) {
       return;
     }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) { setChecking(false); return; }
+    // Hard guarantee: no matter what happens below — reject, hang, or throw —
+    // the splash is dismissed within 3s and the user lands on the login screen.
+    // A stale session on a flaky/unreachable backend must degrade to "logged
+    // out", never trap the user on the black boot screen.
+    const failToLogin = (reason) => {
+      if (cancelled) return;
+      if (reason) console.warn("[AuthGate] boot fell back to login:", reason);
+      setChecking(false);
+    };
 
-      // ✅ Self-profile read — stays on profiles (self-only policy allows this)
-      const { data: profile, error } = await supabase.from("profiles")
-        .select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
-        .eq("id", session.user.id)
-        .maybeSingle();
+    const timeout = setTimeout(() => failToLogin("timeout — backend unreachable"), 3000);
 
-      if (error) console.warn("[AuthGate] profile fetch error:", error.message);
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (cancelled) return;
 
-      const savedThemeId = localStorage.getItem("cabinet_theme_" + session.user.id);
-      const savedTheme = savedThemeId ? CABINET_THEMES.find(t => t.id === savedThemeId) || CABINET_THEMES[0] : CABINET_THEMES[0];
+        if (!session?.user) { clearTimeout(timeout); setChecking(false); return; }
 
-      onAuthenticated({
-        id:           session.user.id,
-        email:        session.user.email,
-        name:         profile?.display_name || session.user.email,
-        handle:       profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
-        avatarUrl:    profile?.avatar_url || null,
-        bio:          profile?.bio || null,
-        skinType:     profile?.skin_type || null,
-        skinConcerns: profile?.skin_concerns || [],
-        hairType:     profile?.hair_type || null,
-        cabinetName:  profile?.cabinet_name || null,
-        cabinetTheme: savedTheme,
-        role:         profile?.role || "user",
-      });
-    });
+        // ✅ Self-profile read — stays on profiles (self-only policy allows this)
+        const { data: profile, error } = await supabase.from("profiles")
+          .select("id, username, display_name, avatar_url, bio, skin_type, skin_concerns, hair_type, cabinet_name, role")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        if (cancelled) return;
+        if (error) console.warn("[AuthGate] profile fetch error:", error.message);
+
+        const savedThemeId = localStorage.getItem("cabinet_theme_" + session.user.id);
+        const savedTheme = savedThemeId ? CABINET_THEMES.find(t => t.id === savedThemeId) || CABINET_THEMES[0] : CABINET_THEMES[0];
+
+        clearTimeout(timeout);
+        onAuthenticated({
+          id:           session.user.id,
+          email:        session.user.email,
+          name:         profile?.display_name || session.user.email,
+          handle:       profile?.username ? "@" + profile.username : "@" + session.user.email.split("@")[0],
+          avatarUrl:    profile?.avatar_url || null,
+          bio:          profile?.bio || null,
+          skinType:     profile?.skin_type || null,
+          skinConcerns: profile?.skin_concerns || [],
+          hairType:     profile?.hair_type || null,
+          cabinetName:  profile?.cabinet_name || null,
+          cabinetTheme: savedTheme,
+          role:         profile?.role || "user",
+        });
+      } catch (e) {
+        clearTimeout(timeout);
+        failToLogin(e?.message || e);
+      }
+    })();
+
+    return () => { cancelled = true; clearTimeout(timeout); };
   }, []);
 
   if (checking) return (
