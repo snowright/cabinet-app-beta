@@ -901,11 +901,12 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
 
   const handleRemove = (product) => {
     const snapshot = { ...product };
-    onRemoveProduct(product, false);
+    onRemoveProduct(product, false);   // remove from UI immediately
+    onRemoveProduct(product, true);    // AND commit soft-delete to DB now (not on a timer)
     setSelectedProduct(null);
     setToast({ product: snapshot, visible: true });
     if (undoRef.current) clearTimeout(undoRef.current);
-    undoRef.current = setTimeout(() => { onRemoveProduct(snapshot, true); setToast(null); }, 5000);
+    undoRef.current = setTimeout(() => setToast(null), 5000);  // timer only hides the toast
   };
 
   const handleRepurchase = (product, status) => {
@@ -917,7 +918,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const handleUndo = () => {
     if (undoRef.current) clearTimeout(undoRef.current);
     if (toast?.product) {
-      onRestoreProduct(toast.product);
+      onRestoreProduct(toast.product, true);  // un-delete in DB + restore to UI
     }
     setToast(null);
   };
@@ -2224,8 +2225,17 @@ export default function App() {
     }
   };
 
-  const handleRestoreProduct = (product) => {
+  const handleRestoreProduct = async (product, persist) => {
     setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [product, ...prev]);
+
+    if (!persist || !authedUser?.id) return;
+
+    const query = supabase.from("user_products").update({ deleted_at: null });
+    const { error } = product.user_product_id
+      ? await query.eq("id", product.user_product_id)
+      : await query.eq("user_id", authedUser.id).eq("product_id", product.id);
+
+    if (error) console.warn("[handleRestoreProduct] undelete error:", error.message);
   };
 
   const handleRemoveProduct = async (product, persist) => {
