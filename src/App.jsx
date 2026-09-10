@@ -209,10 +209,9 @@ function BottomSheet({ onClose, children, footer = null, maxHeight = "88dvh", pa
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight: "min(88dvh, calc(100dvh - 24px))", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-        {/* Fixed header (grab handle + close) */}
-        <div style={{ flexShrink: 0, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
-          <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
-          <button onClick={onClose} aria-label="Close" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
+        {/* Fixed header (close button) */}
+        <div style={{ flexShrink: 0, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "18px 16px 12px", display: "flex", alignItems: "center", justifyContent: "flex-end", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
+          <button onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
         </div>
         {/* Scrollable body */}
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", padding }}>
