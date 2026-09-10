@@ -374,8 +374,8 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
 
           {isOwn && (
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <button onClick={() => handleRepurchase(isRepurchase ? "using" : "repurchased")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isRepurchase ? "#4A7C59" : "rgba(74,124,89,0.25)"}`, background: isRepurchase ? "rgba(74,124,89,0.12)" : "rgba(74,124,89,0.05)", color: "#4A7C59", fontSize: 12, fontWeight: isRepurchase ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>↻ Would buy again</button>
-              <button onClick={() => handleRepurchase(isArchived ? "using" : "discontinued")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isArchived ? "rgba(160,140,128,0.4)" : "rgba(160,140,128,0.2)"}`, background: isArchived ? "rgba(160,140,128,0.12)" : "rgba(160,140,128,0.05)", color: "#A89E94", fontSize: 12, fontWeight: isArchived ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>✕ Pass</button>
+              <button onClick={() => handleRepurchase(isRepurchase ? "using" : "repurchased")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isRepurchase ? "#4A7C59" : "rgba(74,124,89,0.25)"}`, background: isRepurchase ? "rgba(74,124,89,0.12)" : "rgba(74,124,89,0.05)", color: "#4A7C59", fontSize: 12, fontWeight: isRepurchase ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>↻ Repurchased</button>
+              <button onClick={() => handleRepurchase(isArchived ? "using" : "discontinued")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isArchived ? "rgba(160,140,128,0.4)" : "rgba(160,140,128,0.2)"}`, background: isArchived ? "rgba(160,140,128,0.12)" : "rgba(160,140,128,0.05)", color: "#A89E94", fontSize: 12, fontWeight: isArchived ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>✕ Wouldn't buy again</button>
             </div>
           )}
 
@@ -391,7 +391,7 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
             <div style={{ display: "flex", borderTop: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", marginBottom: 14 }}>
               {[
                 { val: product.addedAt ? new Date(product.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "New", label: "added" },
-                { val: isArchived ? "Passed" : isRepurchase ? "↻ Yes" : "Using", label: "status" },
+                { val: isArchived ? "Won't rebuy" : isRepurchase ? "↻ Repurchased" : "Using", label: "status" },
                 { val: categoryLabel, label: "category" },
               ].map((s, i) => (
                 <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "10px 0", borderRight: i < 2 ? "0.5px solid #F0EDE8" : "none" }}>
