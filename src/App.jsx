@@ -205,10 +205,10 @@ function BottomSheet({ onClose, children, footer = null, maxHeight = "88dvh", pa
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", overscrollBehavior: "contain" }}
+      style={{ position: "fixed", inset: 0, height: "100dvh", zIndex: 10000, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", overscrollBehavior: "contain" }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight: "min(88dvh, calc(100dvh - 24px))", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
         {/* Fixed header (grab handle + close) */}
         <div style={{ flexShrink: 0, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
           <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
