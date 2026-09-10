@@ -236,10 +236,10 @@ function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
         {product.image_url
           ? <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }} onError={e => { e.target.style.display = "none"; }} />
           : <span style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{product.emoji}</span>}
-        {repurchaseStatus === "repurchase" && (
+        {repurchaseStatus === "repurchased" && (
           <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.18)", border: "1px solid rgba(74,124,89,0.3)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#4A7C59" }}>↻</div>
         )}
-        {repurchaseStatus === "not_repurchase" && (
+        {repurchaseStatus === "discontinued" && (
           <div style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: "50%", background: "rgba(160,140,128,0.15)", border: "1px solid rgba(160,140,128,0.25)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#A08C80" }}>✕</div>
         )}
         {isOwn && (!repurchaseStatus || repurchaseStatus === "using") && (
@@ -256,8 +256,8 @@ function CompactCard({ product, onClick, isOwn, repurchaseStatus }) {
 
 // ─── CABINET GRID ────────────────────────────────────────────────────────────
 function CabinetGrid({ products, onProductClick, isOwn = true, activeFilter = "all" }) {
-  const activeProducts   = products.filter(p => p.status !== "not_repurchase");
-  const archivedProducts = products.filter(p => p.status === "not_repurchase");
+  const activeProducts   = products.filter(p => p.status !== "discontinued");
+  const archivedProducts = products.filter(p => p.status === "discontinued");
   const [showArchive, setShowArchive] = useState(false);
 
   const filteredActive   = activeFilter === "all" ? activeProducts   : activeProducts.filter(p => p.category === activeFilter);
@@ -316,8 +316,8 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
 
   if (!product) return null;
 
-  const isArchived   = product.status === "not_repurchase";
-  const isRepurchase = product.status === "repurchase";
+  const isArchived   = product.status === "discontinued";
+  const isRepurchase = product.status === "repurchased";
   const repurchaseRate = repurchaseRateFor(product.id);
   const friends        = friendAvatarsFor(product.id);
   const categoryLabel  = CATEGORIES.find(c => c.id === product.category)?.label || product.category;
@@ -325,7 +325,7 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
   const handleRemove = () => { setRemoving(true); setTimeout(() => onRemove?.(product), 250); };
   const handleRepurchase = (status) => {
     onRepurchaseChange?.(product, status);
-    if (status === "not_repurchase") setTimeout(onClose, 400);
+    if (status === "discontinued") setTimeout(onClose, 400);
   };
 
   return (
@@ -374,8 +374,8 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
 
           {isOwn && (
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <button onClick={() => handleRepurchase(isRepurchase ? "using" : "repurchase")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isRepurchase ? "#4A7C59" : "rgba(74,124,89,0.25)"}`, background: isRepurchase ? "rgba(74,124,89,0.12)" : "rgba(74,124,89,0.05)", color: "#4A7C59", fontSize: 12, fontWeight: isRepurchase ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>↻ Would buy again</button>
-              <button onClick={() => handleRepurchase(isArchived ? "using" : "not_repurchase")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isArchived ? "rgba(160,140,128,0.4)" : "rgba(160,140,128,0.2)"}`, background: isArchived ? "rgba(160,140,128,0.12)" : "rgba(160,140,128,0.05)", color: "#A89E94", fontSize: 12, fontWeight: isArchived ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>✕ Pass</button>
+              <button onClick={() => handleRepurchase(isRepurchase ? "using" : "repurchased")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isRepurchase ? "#4A7C59" : "rgba(74,124,89,0.25)"}`, background: isRepurchase ? "rgba(74,124,89,0.12)" : "rgba(74,124,89,0.05)", color: "#4A7C59", fontSize: 12, fontWeight: isRepurchase ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>↻ Would buy again</button>
+              <button onClick={() => handleRepurchase(isArchived ? "using" : "discontinued")} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${isArchived ? "rgba(160,140,128,0.4)" : "rgba(160,140,128,0.2)"}`, background: isArchived ? "rgba(160,140,128,0.12)" : "rgba(160,140,128,0.05)", color: "#A89E94", fontSize: 12, fontWeight: isArchived ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, transition: "all 0.2s" }}>✕ Pass</button>
             </div>
           )}
 
@@ -895,7 +895,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const cabinetName = user?.cabinetName || `${displayName.split(" ")[0]}'s Cabinet`;
   const initials    = displayName.split(/[\s._-]/).map(n => n[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "ME";
   const isBeta      = user?.role === "beta" || user?.role === "admin";
-  const activeProducts = products.filter(p => p.status !== "not_repurchase");
+  const activeProducts = products.filter(p => p.status !== "discontinued");
 
   const handleSignOut = async () => { setSigningOut(true); await supabase.auth.signOut(); onSignOut(); };
 
@@ -911,7 +911,7 @@ function ProfileTab({ user, products, theme, onThemeChange, onAddProduct, onRemo
   const handleRepurchase = (product, status) => {
     setSelectedProduct(prev => prev?.id === product.id ? { ...prev, status } : prev);
     onRepurchaseChange(product, status);
-    if (status === "not_repurchase") setTimeout(() => setSelectedProduct(null), 400);
+    if (status === "discontinued") setTimeout(() => setSelectedProduct(null), 400);
   };
 
   const handleUndo = () => {
