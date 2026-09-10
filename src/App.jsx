@@ -195,20 +195,35 @@ function useProductSearch(query) {
 }
 
 // ─── MOVE 2: BottomSheet — shared wrapper for all slide-up modals ─────────────
-function BottomSheet({ onClose, children, maxHeight = "88dvh", padding = "20px 20px 40px" }) {
+function BottomSheet({ onClose, children, footer = null, maxHeight = "88dvh", padding = "20px 20px 40px" }) {
+  // Lock the page behind the sheet so drags don't scroll the background or trigger pull-to-refresh
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   return (
     <div
-      style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }}
+      style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", overscrollBehavior: "contain" }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", position: "relative" }}>
-        <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#FDFAF7", borderRadius: "24px 24px 0 0", animation: "slideUp 0.38s cubic-bezier(0.25,0.46,0.45,0.94)", maxHeight, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {/* Fixed header (grab handle + close) */}
+        <div style={{ flexShrink: 0, background: "rgba(253,250,247,0.97)", backdropFilter: "blur(12px)", padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "0.5px solid rgba(237,233,227,0.8)" }}>
           <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
           <button onClick={onClose} aria-label="Close" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
         </div>
-        <div style={{ padding, paddingBottom: `calc(40px + env(safe-area-inset-bottom))` }}>
+        {/* Scrollable body */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", padding }}>
           {children}
         </div>
+        {/* Sticky footer (optional) — always visible, never scrolls away */}
+        {footer && (
+          <div style={{ flexShrink: 0, borderTop: "0.5px solid #EDE9E3", background: "rgba(253,250,247,0.98)", backdropFilter: "blur(12px)", padding: `12px 20px calc(12px + env(safe-area-inset-bottom))` }}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -329,7 +344,15 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
   };
 
   return (
-    <BottomSheet onClose={onClose} maxHeight="88vh">
+    <BottomSheet
+      onClose={onClose}
+      maxHeight="88dvh"
+      footer={confirmRemove ? null : (
+        !isOwn
+          ? <button onClick={() => { onAdd?.(product); onClose(); }} style={{ width: "100%", padding: "14px", background: "#1A1A1A", color: "#FFF", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500 }}>+ Add to my cabinet</button>
+          : <button onClick={() => setConfirmRemove(true)} style={{ width: "100%", padding: "12px", background: "none", border: "1px solid rgba(212,112,112,0.3)", borderRadius: 12, color: "#D47070", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Remove from cabinet</button>
+      )}
+    >
       {confirmRemove ? (
         <div style={{ animation: "fadeUp 0.25s ease" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -449,11 +472,6 @@ function ProductDetailModal({ product, onClose, onRemove, onRepurchaseChange, is
               ))}
             </div>
           )}
-
-          {!isOwn
-            ? <button onClick={() => { onAdd?.(product); onClose(); }} style={{ width: "100%", padding: "14px", background: "#1A1A1A", color: "#FFF", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500 }}>+ Add to my cabinet</button>
-            : <button onClick={() => setConfirmRemove(true)} style={{ width: "100%", padding: "12px", background: "none", border: "none", color: "#D47070", fontSize: 13, cursor: "pointer" }}>Remove from cabinet</button>
-          }
         </>
       )}
     </BottomSheet>
