@@ -195,7 +195,7 @@ function useProductSearch(query) {
 }
 
 // ─── MOVE 2: BottomSheet — shared wrapper for all slide-up modals ─────────────
-function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20px 40px" }) {
+function BottomSheet({ onClose, children, maxHeight = "88dvh", padding = "20px 20px 40px" }) {
   return (
     <div
       style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,20,15,0.6)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end" }}
@@ -206,7 +206,7 @@ function BottomSheet({ onClose, children, maxHeight = "88vh", padding = "20px 20
           <div style={{ width: 36, height: 4, background: "#E0DAD2", borderRadius: 2 }} />
           <button onClick={onClose} aria-label="Close" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", background: "#F0EDE8", border: "none", fontSize: 14, color: "#888", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>✕</button>
         </div>
-        <div style={{ padding }}>
+        <div style={{ padding, paddingBottom: `calc(40px + env(safe-area-inset-bottom))` }}>
           {children}
         </div>
       </div>
