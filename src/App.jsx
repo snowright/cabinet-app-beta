@@ -1196,30 +1196,37 @@ function UserProfileView({ user, onBack, currentUserId, onFollowChange }) {
   // Fetch this user's products
   useEffect(() => {
     async function fetchProducts() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("user_products")
         .select(`
           id, status,
           products (
-            id, name, image_url,
-            brands ( name ),
-            product_lines ( category )
+            id, name, price_usd, image_url,
+            product_lines ( name, category, brands ( name ) )
           )
         `)
         .eq("user_id", user.id)
         .is("deleted_at", null)
+        .order("created_at", { ascending: false })
         .limit(50);
 
-      const mapped = (data || []).map(row => ({
-        id:        row.products?.id,
-        name:      row.products?.name || "",
-        brand:     row.products?.brands?.name || "",
-        category:  row.products?.product_lines?.category || "",
-        image_url: row.products?.image_url || null,
-        status:    row.status || "active",
-        color:     "#E8D5C4",
-        emoji:     "✦",
-      }));
+      if (error) console.warn("[UserProfileView fetchProducts]", error.message);
+
+      const mapped = (data || []).filter(row => row.products).map(row => {
+        const pl  = row.products.product_lines;
+        const cat = pl?.category || "other";
+        return {
+          id:        row.products.id,
+          name:      pl?.name || row.products.name || "",
+          brand:     pl?.brands?.name || "",
+          category:  cat,
+          price:     row.products.price_usd ? `$${row.products.price_usd}` : "",
+          image_url: row.products.image_url || null,
+          status:    row.status || "using",
+          color:     categoryColor(cat),
+          emoji:     categoryEmoji(cat),
+        };
+      });
       setProducts(mapped);
       setLoadingProducts(false);
     }
