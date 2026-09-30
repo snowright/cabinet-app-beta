@@ -645,6 +645,8 @@ function ThemePicker({ current, onSelect, onClose }) {
 // ─── FEED POST CARD ──────────────────────────────────────────────────────────
 function FeedPostCard({ post, index }) {
   const [liked, setLiked] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = post.product.image_url && !imgFailed;
   return (
     <div className="fade-up" style={{ background: "#FFF", borderRadius: 20, border: "1.5px solid #EDE9E3", padding: "18px", marginBottom: 12, animationDelay: `${index * 0.07}s`, opacity: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
@@ -656,13 +658,17 @@ function FeedPostCard({ post, index }) {
       </div>
       <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontStyle: "italic" }}>added to their cabinet</div>
       <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#F7F4F0", borderRadius: 14, padding: "14px", marginBottom: 14 }}>
-        <div style={{ width: 54, height: 76, background: `linear-gradient(145deg, ${post.product.color}FF, ${post.product.color}88)`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0, boxShadow: `0 4px 12px ${post.product.color}44` }}>{post.product.emoji}</div>
+        <div style={{ width: 54, height: 76, background: showImg ? "#FFFFFF" : `linear-gradient(145deg, ${post.product.color}FF, ${post.product.color}88)`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0, position: "relative", overflow: "hidden", boxShadow: showImg ? "0 2px 8px rgba(0,0,0,0.06)" : `0 4px 12px ${post.product.color}44` }}>
+          {showImg
+            ? <img src={post.product.image_url} alt={post.product.name} loading="lazy" onError={() => setImgFailed(true)} style={{ width: "100%", height: "100%", objectFit: "contain", position: "absolute", inset: 0 }} />
+            : post.product.emoji}
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 17, fontWeight: 600, color: "#1A1A1A", lineHeight: 1.2, marginBottom: 4 }}>{post.product.name}</div>
           <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>{post.product.brand}</div>
           <div style={{ display: "flex", gap: 6 }}>
-            <span style={{ background: retailerBg(post.product.retailer), color: retailerColor(post.product.retailer), fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{post.product.retailer}</span>
-            <span style={{ background: "#F0EDE8", color: "#888", fontSize: 10, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{post.product.price}</span>
+            {post.product.retailer && <span style={{ background: retailerBg(post.product.retailer), color: retailerColor(post.product.retailer), fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{post.product.retailer}</span>}
+            {post.product.price && <span style={{ background: "#F0EDE8", color: "#888", fontSize: 10, padding: "3px 8px", borderRadius: 20, fontFamily: "'DM Mono', monospace" }}>{post.product.price}</span>}
           </div>
         </div>
       </div>
