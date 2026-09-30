@@ -25,21 +25,23 @@ Rules:
 - If the email is not an order/purchase confirmation or shipping notice (e.g. a promo), return {"is_order": false, "items": []}.`;
 
 // ── Catalog (cached per warm function instance) ─────────────────────────────
-let catalogCache = null;
+let catalogCache = null, catalogLoadedAt = 0;
 async function loadCatalog() {
-  if (catalogCache) return catalogCache;
+  if (catalogCache && Date.now() - catalogLoadedAt < 60_000) return catalogCache;
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/products?select=id,name,product_lines(name,category,brands(name))&limit=5000`,
+    `${SUPABASE_URL}/rest/v1/products?select=id,name,product_lines(id,name,category,brands(id,name))&limit=5000`,
     { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } }
   );
   if (!r.ok) throw new Error("catalog load failed: " + (await r.text()));
   const rows = await r.json();
+  catalogLoadedAt = Date.now();
   catalogCache = rows.map((p) => {
     const brand = p.product_lines?.brands?.name || "";
     const line = p.product_lines?.name || "";
     return {
       id: p.id,
       brand,
+      brandId: p.product_lines?.brands?.id || null,
       line,
       variant: p.name,
       brandKey: norm(brand),
@@ -86,6 +88,8 @@ function matchItem(item, catalog) {
   return {
     status,
     score: Math.round(bestScore * 100) / 100,
+    // The brand we'd file a new product under, when the brand is already in the catalog
+    brand: sameBrand.length ? { id: sameBrand[0].brandId, name: sameBrand[0].brand } : null,
     catalog: best && status !== "product_not_in_catalog" ? { id: best.id, brand: best.brand, line: best.line, variant: best.variant } : null,
   };
 }

@@ -42,6 +42,12 @@
   .matched { color:var(--good); background:var(--goodbg); }
   .possible { color:var(--warn); background:var(--warnbg); }
   .brand_not_in_catalog, .product_not_in_catalog { color:var(--bad); background:var(--badbg); }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .seg button { background:transparent; color:var(--muted); border-radius:0; padding:6px 12px; font-size:12px; }
+  .seg button.on-approve { background:var(--goodbg); color:var(--good); }
+  .seg button.on-deny { background:var(--badbg); color:var(--bad); }
+  tr.denied td { opacity:0.45; }
+  .result { display:block; margin-top:6px; font-size:11px; }
   .small { font-size:12px; color:var(--muted); }
   .hidden { display:none; }
   code { background:var(--alt); padding:1px 5px; border-radius:4px; font-size:12px; }
@@ -57,6 +63,11 @@
       <div><label for="clientId">Google OAuth client ID</label><input id="clientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" /></div>
       <div><label for="secret">POC secret (EMAIL_IMPORT_POC_SECRET)</label><input id="secret" type="password" autocomplete="off" /></div>
     </div>
+    <div class="grid2" style="margin-top:12px">
+      <div><label for="email">cabinet. login email (admin)</label><input id="email" type="email" autocomplete="username" /></div>
+      <div><label for="password">cabinet. password</label><input id="password" type="password" autocomplete="current-password" /></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="signInBtn" class="ghost">Sign in to cabinet.</button><span id="authStatus" class="small">Not signed in. You can scan without signing in; saving needs it.</span></div>
     <div class="grid3">
       <div><label for="query">Gmail search</label><input id="query" /></div>
       <div><label for="months">Months back</label><input id="months" type="number" min="1" max="60" value="24" /></div>
@@ -84,13 +95,22 @@
   </section>
 
   <section id="resultsCard" class="card hidden">
+    <div class="row" style="margin-top:0; justify-content:space-between">
+      <div class="row" style="margin-top:0">
+        <button class="ghost" id="approveMatchedBtn">Approve all matched</button>
+        <button class="ghost" id="approveAllBtn">Approve all</button>
+        <button class="ghost" id="clearBtn">Clear decisions</button>
+      </div>
+      <button id="commitBtn" disabled>Add 0 approved to my cabinet</button>
+    </div>
+    <p id="commitStatus" class="small"></p>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Product found in email</th><th>Orders</th><th>Last ordered</th><th>Match</th><th>Catalog product</th></tr></thead>
+        <thead><tr><th>Product found in email</th><th>Orders</th><th>Match</th><th>What approving does</th><th>Decision</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="small">Spot-check 20 orders against your inbox: is every beauty item here, and is anything here that you didn't buy?</p>
+    <p class="small">Spot-check 20 orders against your inbox: is every beauty item here, and is anything here that you didn't buy? Denied items are never written.</p>
   </section>
 </main>
 
@@ -223,7 +243,7 @@ async function scan() {
     });
 
     render(results, emails.length, (performance.now() - started) / 1000);
-    setStatus('Done. Nothing was saved.');
+    setStatus('Scan done. Nothing is saved until you approve items and tap Add.');
   } catch (err) {
     setStatus('Error: ' + err.message);
   } finally {
@@ -254,7 +274,6 @@ function render(results, emailCount, seconds) {
   const list = [...products.values()].sort((a, b) => b.orders.size - a.orders.size || (b.last > a.last ? 1 : -1));
   const count = (s) => list.filter(p => p.match.status === s).length;
   const matched = count('matched');
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   $('sEmails').textContent = emailCount;
   $('sOrders').textContent = orders.size;
@@ -266,15 +285,13 @@ function render(results, emailCount, seconds) {
   // Approximate Haiku pricing: $1 / M input tokens, $5 / M output tokens. Verify against current pricing.
   $('sCost').textContent = '$' + ((inTok / 1e6) * 1 + (outTok / 1e6) * 5).toFixed(3);
 
-  const label = { matched: 'Matched', possible: 'Possible', brand_not_in_catalog: 'Brand missing', product_not_in_catalog: 'Product missing' };
-  $('rows').innerHTML = list.map(p => `
-    <tr>
-      <td><b>${esc(p.brand)}</b><br>${esc(p.product)}${p.variant ? '<br><span class="small">' + esc(p.variant) + '</span>' : ''}${p.size ? ' <span class="small">· ' + esc(p.size) + '</span>' : ''}<br><span class="small">${esc(p.retailer || '')}</span></td>
-      <td>${p.orders.size}${p.orders.size > 1 ? ' <span class="pill matched">repurchase</span>' : ''}</td>
-      <td>${esc(p.last)}</td>
-      <td><span class="pill ${p.match.status}">${label[p.match.status]}</span><br><span class="small">score ${p.match.score}</span></td>
-      <td>${p.match.catalog ? esc(p.match.catalog.brand) + '<br><span class="small">' + esc(p.match.catalog.line) + '</span>' : '<span class="small">—</span>'}</td>
-    </tr>`).join('');
+  list.forEach(p => {
+    p.key = [norm(p.brand), norm(p.product), norm(p.variant)].join('|');
+    p.decision = p.match.status === 'matched' ? 'approve' : null;  // confident matches start approved
+    p.result = null;
+  });
+  items = list;
+  renderRows();
 
   lastResults = { scannedAt: new Date().toISOString(), emailCount, orders: orders.size, tokens: { input: inTok, output: outTok },
     products: list.map(p => ({ ...p, orders: [...p.orders] })) };
@@ -282,6 +299,106 @@ function render(results, emailCount, seconds) {
   $('resultsCard').classList.remove('hidden');
   $('exportBtn').classList.remove('hidden');
 }
+
+// ── Review: approve / deny ──────────────────────────────────────────────────
+let items = [];
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const LABEL = { matched: 'Matched', possible: 'Possible', brand_not_in_catalog: 'Brand missing', product_not_in_catalog: 'Product missing' };
+function effect(p) {
+  if (p.match.catalog) return 'Adds <b>' + esc(p.match.catalog.brand) + '</b> · ' + esc(p.match.catalog.line) + (p.match.status === 'possible' ? '<br><span class="small">Check this is the same product</span>' : '');
+  return 'Creates new product <b>' + esc(p.match.brand ? p.match.brand.name : p.brand) + '</b> · ' + esc(p.product) + (p.match.brand ? '' : '<br><span class="small">and a new brand</span>');
+}
+function resultText(r) {
+  if (!r) return '';
+  if (r.action === 'added') return '<span class="result" style="color:var(--good)">Added' + (r.createdProduct ? ' (new catalog product)' : '') + (r.status === 'repurchased' ? ' as Repurchased' : '') + '</span>';
+  if (r.action === 'already_in_cabinet') return '<span class="result small">Already in your cabinet</span>';
+  return '<span class="result" style="color:var(--bad)">Error: ' + esc(r.error) + '</span>';
+}
+function renderRows() {
+  $('rows').innerHTML = items.map((p, i) => `
+    <tr class="${p.decision === 'deny' ? 'denied' : ''}">
+      <td><b>${esc(p.brand)}</b><br>${esc(p.product)}${p.variant ? '<br><span class="small">' + esc(p.variant) + '</span>' : ''}${p.size ? ' <span class="small">· ' + esc(p.size) + '</span>' : ''}<br><span class="small">${esc(p.retailer || '')}${p.last ? ' · ' + esc(p.last) : ''}</span></td>
+      <td>${p.orders.size}${p.orders.size > 1 ? ' <span class="pill matched">repurchase</span>' : ''}</td>
+      <td><span class="pill ${p.match.status}">${LABEL[p.match.status]}</span><br><span class="small">score ${p.match.score}</span></td>
+      <td>${effect(p)}</td>
+      <td><div class="seg"><button data-i="${i}" data-d="approve" class="${p.decision === 'approve' ? 'on-approve' : ''}" ${p.result ? 'disabled' : ''}>Approve</button><button data-i="${i}" data-d="deny" class="${p.decision === 'deny' ? 'on-deny' : ''}" ${p.result ? 'disabled' : ''}>Deny</button></div>${resultText(p.result)}</td>
+    </tr>`).join('');
+  updateCommitBtn();
+}
+function pendingApproved() { return items.filter(p => p.decision === 'approve' && !p.result); }
+function updateCommitBtn() {
+  const n = pendingApproved().length;
+  $('commitBtn').textContent = 'Add ' + n + ' approved to my cabinet';
+  $('commitBtn').disabled = !n || !session;
+  const undecided = items.filter(p => !p.decision && !p.result).length;
+  $('commitStatus').textContent = !session ? 'Sign in above to save.' : undecided ? undecided + ' items still need a decision (undecided items are skipped).' : '';
+}
+$('rows').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-i]'); if (!b) return;
+  const p = items[Number(b.dataset.i)];
+  p.decision = p.decision === b.dataset.d ? null : b.dataset.d;
+  renderRows();
+});
+$('approveMatchedBtn').addEventListener('click', () => { items.forEach(p => { if (!p.result && p.match.status === 'matched') p.decision = 'approve'; }); renderRows(); });
+$('approveAllBtn').addEventListener('click', () => { items.forEach(p => { if (!p.result) p.decision = 'approve'; }); renderRows(); });
+$('clearBtn').addEventListener('click', () => { items.forEach(p => { if (!p.result) p.decision = null; }); renderRows(); });
+
+// ── Sign in (token kept in memory only) ─────────────────────────────────────
+let session = null;
+$('signInBtn').addEventListener('click', async () => {
+  const email = $('email').value.trim(), password = $('password').value;
+  if (!email || !password) { $('authStatus').textContent = 'Enter your email and password.'; return; }
+  $('authStatus').textContent = 'Signing in…';
+  try {
+    const cfg = await (await fetch('/api/email-import-config')).json();
+    if (cfg.error) throw new Error(cfg.error);
+    const r = await fetch(cfg.supabaseUrl + '/auth/v1/token?grant_type=password', {
+      method: 'POST', headers: { apikey: cfg.anonKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error_description || data.msg || 'sign-in failed');
+    session = { token: data.access_token, email: data.user && data.user.email };
+    $('password').value = '';
+    $('authStatus').textContent = 'Signed in as ' + session.email + '.';
+  } catch (err) {
+    session = null;
+    $('authStatus').textContent = 'Error: ' + err.message;
+  }
+  updateCommitBtn();
+});
+
+// ── Write approved items ────────────────────────────────────────────────────
+$('commitBtn').addEventListener('click', async () => {
+  const approved = pendingApproved();
+  if (!approved.length || !session) return;
+  $('commitBtn').disabled = true;
+  $('commitStatus').textContent = 'Saving ' + approved.length + ' items…';
+  try {
+    const r = await fetch('/api/email-import-commit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-poc-secret': $('secret').value.trim(), Authorization: 'Bearer ' + session.token },
+      body: JSON.stringify({ items: approved.map(p => ({
+        key: p.key, brand: p.brand, product: p.product, variant: p.variant || null, size: p.size || null,
+        price_usd: typeof p.price_usd === 'number' ? p.price_usd : null, category: p.category || 'other',
+        orders: p.orders.size,
+        catalogProductId: p.match.catalog ? p.match.catalog.id : null,
+        brandId: !p.match.catalog && p.match.brand ? p.match.brand.id : null,
+      })) }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('save ' + r.status));
+    const byKey = new Map(data.results.map(x => [x.key, x]));
+    approved.forEach(p => { p.result = byKey.get(p.key) || { action: 'error', error: 'no result returned' }; });
+    const added = data.results.filter(x => x.action === 'added').length;
+    const errors = data.results.filter(x => x.action === 'error').length;
+    renderRows();
+    $('commitStatus').textContent = 'Added ' + added + ' to your cabinet' + (errors ? ', ' + errors + ' failed (see rows).' : '.') + ' Check the app to see them.';
+  } catch (err) {
+    $('commitStatus').textContent = 'Error: ' + err.message;
+    updateCommitBtn();
+  }
+});
 
 $('scanBtn').addEventListener('click', scan);
 $('exportBtn').addEventListener('click', () => {
