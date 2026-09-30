@@ -2255,17 +2255,28 @@ export default function App() {
     }
   };
 
+  // Soft-delete / restore go through the set_user_product_deleted RPC (SECURITY DEFINER,
+  // owner-checked). Direct UPDATEs of deleted_at are rejected by RLS because the
+  // SELECT policy filters deleted_at IS NULL.
+  const setProductDeleted = async (product, deleted) => {
+    const { error } = await supabase.rpc("set_user_product_deleted", {
+      p_user_product_id: product.user_product_id || null,
+      p_product_id:      product.id,
+      p_deleted:         deleted,
+    });
+    return error;
+  };
+
   const handleRestoreProduct = async (product, persist) => {
     setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [product, ...prev]);
 
     if (!persist || !authedUser?.id) return;
 
-    const query = supabase.from("user_products").update({ deleted_at: null });
-    const { error } = product.user_product_id
-      ? await query.eq("id", product.user_product_id)
-      : await query.eq("user_id", authedUser.id).eq("product_id", product.id);
-
-    if (error) console.warn("[handleRestoreProduct] undelete error:", error.message);
+    const error = await setProductDeleted(product, false);
+    if (error) {
+      console.warn("[handleRestoreProduct] undelete error:", error.message);
+      setMyProducts(prev => prev.filter(p => p.id !== product.id));  // keep UI honest
+    }
   };
 
   const handleRemoveProduct = async (product, persist) => {
@@ -2273,15 +2284,11 @@ export default function App() {
 
     if (!authedUser?.id) return;
 
-    const query = supabase.from("user_products")
-      .update({ deleted_at: new Date().toISOString() })
-      .is("deleted_at", null);
-
-    const { error } = product.user_product_id
-      ? await query.eq("id", product.user_product_id)
-      : await query.eq("user_id", authedUser.id).eq("product_id", product.id);
-
-    if (error) console.warn("[handleRemoveProduct] update error:", error.message);
+    const error = await setProductDeleted(product, true);
+    if (error) {
+      console.warn("[handleRemoveProduct] soft-delete error:", error.message);
+      setMyProducts(prev => prev.find(p => p.id === product.id) ? prev : [product, ...prev]);  // roll back
+    }
   };
 
   const handleThemeChange = (theme) => {
