@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/((?!quick-add\\.html|api/).*)", "destination": "/index.html" }
+    { "source": "/((?!quick-add\\.html|email-import-poc\\.html|api/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

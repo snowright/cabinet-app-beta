@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Email Import POC · cabinet.</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet" />
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root { --bg:#FDFAF7; --surface:#FFFFFF; --alt:#F5F2EE; --line:#E8E2D9; --ink:#1C1916; --muted:#8A8178; --accent:#8B6F47;
+          --good:#4A7C59; --goodbg:#F2F8F4; --warn:#8B6F47; --warnbg:#FBF6F0; --bad:#B0493B; --badbg:#FDF2F0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 'DM Sans', system-ui, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-family:'Cormorant Garamond', serif; font-weight:400; font-size:40px; margin:0; letter-spacing:-0.01em; }
+  h1 span { color:#C4A882; }
+  .sub { color:var(--muted); margin:4px 0 28px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:0 0 6px; letter-spacing:0.02em; }
+  input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; background:var(--bg); color:var(--ink); }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .grid3 { display:grid; grid-template-columns: 2fr 1fr 1fr; gap:12px; margin-top:12px; }
+  @media (max-width: 640px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  button { font:inherit; font-weight:500; border:none; border-radius:10px; padding:12px 18px; cursor:pointer; background:var(--accent); color:#fff; }
+  button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
+  button:disabled { opacity:0.5; cursor:default; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:16px; }
+  #status { color:var(--muted); font-size:13px; }
+  .bar { height:4px; background:var(--alt); border-radius:4px; overflow:hidden; margin-top:12px; }
+  .bar > div { height:100%; width:0; background:var(--accent); transition:width .3s ease; }
+  .stats { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; }
+  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background:var(--alt); border-radius:12px; padding:14px; }
+  .stat b { display:block; font-size:24px; font-weight:600; font-variant-numeric: tabular-nums; }
+  .stat span { font-size:12px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; font-weight:500; color:var(--muted); font-size:12px; padding:8px 8px; border-bottom:1px solid var(--line); }
+  td { padding:10px 8px; border-bottom:1px solid var(--alt); vertical-align:top; }
+  .tablewrap { overflow-x:auto; }
+  .pill { display:inline-block; font-size:11px; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+  .matched { color:var(--good); background:var(--goodbg); }
+  .possible { color:var(--warn); background:var(--warnbg); }
+  .brand_not_in_catalog, .product_not_in_catalog { color:var(--bad); background:var(--badbg); }
+  .small { font-size:12px; color:var(--muted); }
+  .hidden { display:none; }
+  code { background:var(--alt); padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>cabinet<span>.</span> email import</h1>
+  <p class="sub">Proof of concept. Scans your order emails, extracts beauty products, and checks them against the catalog. Nothing is saved.</p>
+
+  <section class="card">
+    <div class="grid2">
+      <div><label for="clientId">Google OAuth client ID</label><input id="clientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" /></div>
+      <div><label for="secret">POC secret (EMAIL_IMPORT_POC_SECRET)</label><input id="secret" type="password" autocomplete="off" /></div>
+    </div>
+    <div class="grid3">
+      <div><label for="query">Gmail search</label><input id="query" /></div>
+      <div><label for="months">Months back</label><input id="months" type="number" min="1" max="60" value="24" /></div>
+      <div><label for="maxEmails">Max emails</label><input id="maxEmails" type="number" min="1" max="500" value="150" /></div>
+    </div>
+    <div class="row">
+      <button id="scanBtn">Connect Gmail and scan</button>
+      <button id="exportBtn" class="ghost hidden">Download results (JSON)</button>
+      <span id="status"></span>
+    </div>
+    <div class="bar"><div id="progress"></div></div>
+  </section>
+
+  <section id="statsCard" class="card hidden">
+    <div class="stats">
+      <div class="stat"><b id="sEmails">0</b><span>emails scanned</span></div>
+      <div class="stat"><b id="sOrders">0</b><span>orders found</span></div>
+      <div class="stat"><b id="sProducts">0</b><span>unique products</span></div>
+      <div class="stat"><b id="sMatch">0%</b><span>matched to catalog</span></div>
+      <div class="stat"><b id="sPossible">0</b><span>possible matches</span></div>
+      <div class="stat"><b id="sMissing">0</b><span>not in catalog</span></div>
+      <div class="stat"><b id="sTime">0s</b><span>scan time</span></div>
+      <div class="stat"><b id="sCost">$0</b><span>AI cost (approx.)</span></div>
+    </div>
+  </section>
+
+  <section id="resultsCard" class="card hidden">
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Product found in email</th><th>Orders</th><th>Last ordered</th><th>Match</th><th>Catalog product</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="small">Spot-check 20 orders against your inbox: is every beauty item here, and is anything here that you didn't buy?</p>
+  </section>
+</main>
+
+<script>
+const DEFAULT_QUERY = 'from:(sephora.com OR ulta.com) subject:(order OR shipped OR confirmation)';
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem('emailpoc_' + k) || ''; } catch { return ''; } },
+  set(k, v) { try { localStorage.setItem('emailpoc_' + k, v); } catch {} },
+};
+$('clientId').value = store.get('clientId');
+$('secret').value = store.get('secret');
+$('query').value = store.get('query') || DEFAULT_QUERY;
+
+let lastResults = null;
+const setStatus = (t) => { $('status').textContent = t; };
+const setProgress = (p) => { $('progress').style.width = Math.round(p * 100) + '%'; };
+
+// ── Gmail helpers ───────────────────────────────────────────────────────────
+async function gmail(token, path) {
+  const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/' + path, { headers: { Authorization: 'Bearer ' + token } });
+  if (!r.ok) throw new Error('Gmail ' + r.status + ': ' + (await r.text()).slice(0, 200));
+  return r.json();
+}
+async function listMessages(token, q, max) {
+  const ids = [];
+  let pageToken = '';
+  while (ids.length < max) {
+    const page = await gmail(token, 'messages?maxResults=100&q=' + encodeURIComponent(q) + (pageToken ? '&pageToken=' + pageToken : ''));
+    (page.messages || []).forEach(m => ids.push(m.id));
+    if (!page.nextPageToken) break;
+    pageToken = page.nextPageToken;
+  }
+  return ids.slice(0, max);
+}
+function decodeB64Url(data) {
+  const b64 = data.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+  return new TextDecoder('utf-8').decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+function findPart(payload, mime) {
+  if (!payload) return null;
+  if (payload.mimeType === mime && payload.body && payload.body.data) return payload.body.data;
+  for (const p of payload.parts || []) { const hit = findPart(p, mime); if (hit) return hit; }
+  return null;
+}
+function htmlToText(html) {
+  const marked = html
+    .replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<(br|\/p|\/div|\/tr|\/li|\/h[1-6]|\/table)[^>]*>/gi, '\n')
+    .replace(/<\/td>/gi, ' | ');
+  const doc = new DOMParser().parseFromString(marked, 'text/html');
+  return (doc.body ? doc.body.textContent : '')
+    .replace(/ /g, ' ').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+}
+async function fetchEmail(token, id) {
+  const m = await gmail(token, 'messages/' + id + '?format=full');
+  const header = (n) => (m.payload.headers || []).find(h => h.name.toLowerCase() === n)?.value || '';
+  const html = findPart(m.payload, 'text/html');
+  const plain = findPart(m.payload, 'text/plain');
+  const text = html ? htmlToText(decodeB64Url(html)) : plain ? decodeB64Url(plain) : '';
+  return { id, from: header('from'), subject: header('subject'), date: header('date'), text };
+}
+async function pool(items, size, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (i < items.length) { const n = i++; out[n] = await fn(items[n], n); }
+  }));
+  return out;
+}
+
+// ── Scan ────────────────────────────────────────────────────────────────────
+function getToken(clientId) {
+  return new Promise((resolve, reject) => {
+    if (!window.google || !google.accounts) return reject(new Error('Google sign-in script not loaded yet. Try again in a second.'));
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/gmail.readonly',
+      callback: (resp) => resp.error ? reject(new Error(resp.error)) : resolve(resp.access_token),
+      error_callback: (err) => reject(new Error(err.message || err.type || 'consent cancelled')),
+    });
+    client.requestAccessToken();
+  });
+}
+
+async function scan() {
+  const clientId = $('clientId').value.trim(), secret = $('secret').value.trim();
+  const months = Math.max(1, Math.min(60, Number($('months').value) || 24));
+  const max = Math.max(1, Math.min(500, Number($('maxEmails').value) || 150));
+  const q = ($('query').value.trim() || DEFAULT_QUERY) + ' newer_than:' + months + 'm';
+  if (!clientId || !secret) { setStatus('Add the client ID and POC secret first.'); return; }
+  store.set('clientId', clientId); store.set('secret', secret); store.set('query', $('query').value.trim());
+
+  $('scanBtn').disabled = true;
+  const started = performance.now();
+  let token = null;
+  try {
+    setStatus('Waiting for Google consent…'); setProgress(0);
+    token = await getToken(clientId);
+
+    setStatus('Searching your inbox…');
+    const ids = await listMessages(token, q, max);
+    if (!ids.length) { setStatus('No matching emails. Try widening the search.'); return; }
+
+    setStatus('Reading ' + ids.length + ' emails…');
+    let read = 0;
+    const emails = await pool(ids, 8, async (id) => {
+      const e = await fetchEmail(token, id);
+      setProgress((++read / ids.length) * 0.3);
+      return e;
+    });
+
+    const batches = [];
+    for (let i = 0; i < emails.length; i += 8) batches.push(emails.slice(i, i + 8));
+    let done = 0;
+    const results = [];
+    await pool(batches, 3, async (batch) => {
+      const r = await fetch('/api/email-import-extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-poc-secret': secret },
+        body: JSON.stringify({ emails: batch }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || ('extract ' + r.status));
+      results.push(...data.results);
+      done += batch.length;
+      setProgress(0.3 + (done / emails.length) * 0.7);
+      setStatus('Extracting products… ' + done + ' / ' + emails.length);
+    });
+
+    render(results, emails.length, (performance.now() - started) / 1000);
+    setStatus('Done. Nothing was saved.');
+  } catch (err) {
+    setStatus('Error: ' + err.message);
+  } finally {
+    if (token && window.google) google.accounts.oauth2.revoke(token, () => {});
+    $('scanBtn').disabled = false;
+  }
+}
+
+// ── Aggregate + render ──────────────────────────────────────────────────────
+const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function render(results, emailCount, seconds) {
+  const orders = new Set();
+  const products = new Map();
+  let inTok = 0, outTok = 0;
+  for (const r of results) {
+    if (r.usage) { inTok += r.usage.input_tokens || 0; outTok += r.usage.output_tokens || 0; }
+    if (!r.is_order || !r.items) continue;
+    const orderKey = r.order_id || r.messageId;
+    orders.add(orderKey);
+    for (const it of r.items) {
+      const key = [norm(it.brand), norm(it.product), norm(it.variant)].join('|');
+      const p = products.get(key) || { ...it, retailer: r.retailer, orders: new Set(), last: '' };
+      p.orders.add(orderKey);
+      if ((r.order_date || '') > p.last) p.last = r.order_date || '';
+      products.set(key, p);
+    }
+  }
+  const list = [...products.values()].sort((a, b) => b.orders.size - a.orders.size || (b.last > a.last ? 1 : -1));
+  const count = (s) => list.filter(p => p.match.status === s).length;
+  const matched = count('matched');
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  $('sEmails').textContent = emailCount;
+  $('sOrders').textContent = orders.size;
+  $('sProducts').textContent = list.length;
+  $('sMatch').textContent = list.length ? Math.round((matched / list.length) * 100) + '%' : '0%';
+  $('sPossible').textContent = count('possible');
+  $('sMissing').textContent = count('brand_not_in_catalog') + count('product_not_in_catalog');
+  $('sTime').textContent = Math.round(seconds) + 's';
+  // Approximate Haiku pricing: $1 / M input tokens, $5 / M output tokens. Verify against current pricing.
+  $('sCost').textContent = '$' + ((inTok / 1e6) * 1 + (outTok / 1e6) * 5).toFixed(3);
+
+  const label = { matched: 'Matched', possible: 'Possible', brand_not_in_catalog: 'Brand missing', product_not_in_catalog: 'Product missing' };
+  $('rows').innerHTML = list.map(p => `
+    <tr>
+      <td><b>${esc(p.brand)}</b><br>${esc(p.product)}${p.variant ? '<br><span class="small">' + esc(p.variant) + '</span>' : ''}${p.size ? ' <span class="small">· ' + esc(p.size) + '</span>' : ''}<br><span class="small">${esc(p.retailer || '')}</span></td>
+      <td>${p.orders.size}${p.orders.size > 1 ? ' <span class="pill matched">repurchase</span>' : ''}</td>
+      <td>${esc(p.last)}</td>
+      <td><span class="pill ${p.match.status}">${label[p.match.status]}</span><br><span class="small">score ${p.match.score}</span></td>
+      <td>${p.match.catalog ? esc(p.match.catalog.brand) + '<br><span class="small">' + esc(p.match.catalog.line) + '</span>' : '<span class="small">—</span>'}</td>
+    </tr>`).join('');
+
+  lastResults = { scannedAt: new Date().toISOString(), emailCount, orders: orders.size, tokens: { input: inTok, output: outTok },
+    products: list.map(p => ({ ...p, orders: [...p.orders] })) };
+  $('statsCard').classList.remove('hidden');
+  $('resultsCard').classList.remove('hidden');
+  $('exportBtn').classList.remove('hidden');
+}
+
+$('scanBtn').addEventListener('click', scan);
+$('exportBtn').addEventListener('click', () => {
+  if (!lastResults) return;
+  const blob = new Blob([JSON.stringify(lastResults, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'email-import-poc-results.json'; a.click();
+});
+</script>
+</body>
+</html>
