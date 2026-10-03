@@ -47,6 +47,9 @@
   .seg button.on-approve { background:var(--goodbg); color:var(--good); }
   .seg button.on-deny { background:var(--badbg); color:var(--bad); }
   tr.denied td { opacity:0.45; }
+  .edit { display:grid; gap:6px; min-width:200px; }
+  .edit input, .edit select { padding:7px 9px; font-size:13px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-family:inherit; }
+  button.link { background:none; color:var(--accent); padding:4px 0; font-size:12px; text-decoration:underline; text-align:left; }
   .result { display:block; margin-top:6px; font-size:11px; }
   .small { font-size:12px; color:var(--muted); }
   .hidden { display:none; }
@@ -56,7 +59,7 @@
 <body>
 <main>
   <h1>cabinet<span>.</span> email import</h1>
-  <p class="sub">Proof of concept. Scans your order emails, extracts beauty products, and checks them against the catalog. Nothing is saved.</p>
+  <p class="sub">Proof of concept. Scans your order emails, extracts beauty products, and checks them against the catalog. Nothing is saved until you approve it.</p>
 
   <section class="card">
     <div class="grid2">
@@ -288,6 +291,13 @@ function render(results, emailCount, seconds) {
   list.forEach(p => {
     p.key = [norm(p.brand), norm(p.product), norm(p.variant)].join('|');
     p.decision = p.match.status === 'matched' ? 'approve' : null;  // confident matches start approved
+    p.createNew = !p.match.catalog;   // unmatched items are created; matched ones can be switched to "create new"
+    p.edit = {
+      brand: p.match.brand ? p.match.brand.name : (p.brand || ''),   // prefer the catalog's spelling of a known brand
+      product: p.product || '',
+      variant: p.variant || '',
+      category: CATS.includes(p.category) ? p.category : 'other',
+    };
     p.result = null;
   });
   items = list;
@@ -304,9 +314,24 @@ function render(results, emailCount, seconds) {
 let items = [];
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const LABEL = { matched: 'Matched', possible: 'Possible', brand_not_in_catalog: 'Brand missing', product_not_in_catalog: 'Product missing' };
-function effect(p) {
-  if (p.match.catalog) return 'Adds <b>' + esc(p.match.catalog.brand) + '</b> · ' + esc(p.match.catalog.line) + (p.match.status === 'possible' ? '<br><span class="small">Check this is the same product</span>' : '');
-  return 'Creates new product <b>' + esc(p.match.brand ? p.match.brand.name : p.brand) + '</b> · ' + esc(p.product) + (p.match.brand ? '' : '<br><span class="small">and a new brand</span>');
+const CATS = ['skincare', 'makeup', 'haircare', 'bodycare', 'fragrance', 'tools', 'supplements', 'other'];
+function effect(p, i) {
+  const locked = !!p.result;
+  if (!p.createNew) {
+    return 'Adds <b>' + esc(p.match.catalog.brand) + '</b> · ' + esc(p.match.catalog.line)
+      + (p.match.status === 'possible' ? '<br><span class="small">Check this is the same product</span>' : '')
+      + (locked ? '' : '<br><button class="link" data-i="' + i + '" data-act="new">Not it? Create as new</button>');
+  }
+  const knownBrand = p.match.brand && norm(p.edit.brand) === norm(p.match.brand.name);
+  const dis = locked ? ' disabled' : '';
+  return '<div class="edit">'
+    + '<span class="small">Creates a new catalog product' + (knownBrand ? ' under an existing brand' : ' <b>and a new brand</b>') + ':</span>'
+    + '<input data-i="' + i + '" data-f="brand" placeholder="Brand" value="' + esc(p.edit.brand) + '"' + dis + '>'
+    + '<input data-i="' + i + '" data-f="product" placeholder="Product name" value="' + esc(p.edit.product) + '"' + dis + '>'
+    + '<input data-i="' + i + '" data-f="variant" placeholder="Shade / scent / size (optional)" value="' + esc(p.edit.variant) + '"' + dis + '>'
+    + '<select data-i="' + i + '" data-f="category"' + dis + '>' + CATS.map(c => '<option' + (c === p.edit.category ? ' selected' : '') + '>' + c + '</option>').join('') + '</select>'
+    + (p.match.catalog && !locked ? '<button class="link" data-i="' + i + '" data-act="match">Use the match instead</button>' : '')
+    + '</div>';
 }
 function resultText(r) {
   if (!r) return '';
@@ -320,7 +345,7 @@ function renderRows() {
       <td><b>${esc(p.brand)}</b><br>${esc(p.product)}${p.variant ? '<br><span class="small">' + esc(p.variant) + '</span>' : ''}${p.size ? ' <span class="small">· ' + esc(p.size) + '</span>' : ''}<br><span class="small">${esc(p.retailer || '')}${p.last ? ' · ' + esc(p.last) : ''}</span></td>
       <td>${p.orders.size}${p.orders.size > 1 ? ' <span class="pill matched">repurchase</span>' : ''}</td>
       <td><span class="pill ${p.match.status}">${LABEL[p.match.status]}</span><br><span class="small">score ${p.match.score}</span></td>
-      <td>${effect(p)}</td>
+      <td>${effect(p, i)}</td>
       <td><div class="seg"><button data-i="${i}" data-d="approve" class="${p.decision === 'approve' ? 'on-approve' : ''}" ${p.result ? 'disabled' : ''}>Approve</button><button data-i="${i}" data-d="deny" class="${p.decision === 'deny' ? 'on-deny' : ''}" ${p.result ? 'disabled' : ''}>Deny</button></div>${resultText(p.result)}</td>
     </tr>`).join('');
   updateCommitBtn();
@@ -336,9 +361,16 @@ function updateCommitBtn() {
 $('rows').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-i]'); if (!b) return;
   const p = items[Number(b.dataset.i)];
-  p.decision = p.decision === b.dataset.d ? null : b.dataset.d;
+  if (b.dataset.act === 'new') p.createNew = true;
+  else if (b.dataset.act === 'match') p.createNew = false;
+  else p.decision = p.decision === b.dataset.d ? null : b.dataset.d;
   renderRows();
 });
+$('rows').addEventListener('input', (e) => {
+  const f = e.target.dataset.f; if (!f) return;
+  items[Number(e.target.dataset.i)].edit[f] = e.target.value;
+});
+$('rows').addEventListener('change', (e) => { if (e.target.dataset.f === 'brand') renderRows(); });
 $('approveMatchedBtn').addEventListener('click', () => { items.forEach(p => { if (!p.result && p.match.status === 'matched') p.decision = 'approve'; }); renderRows(); });
 $('approveAllBtn').addEventListener('click', () => { items.forEach(p => { if (!p.result) p.decision = 'approve'; }); renderRows(); });
 $('clearBtn').addEventListener('click', () => { items.forEach(p => { if (!p.result) p.decision = null; }); renderRows(); });
@@ -372,6 +404,8 @@ $('signInBtn').addEventListener('click', async () => {
 $('commitBtn').addEventListener('click', async () => {
   const approved = pendingApproved();
   if (!approved.length || !session) return;
+  const incomplete = approved.filter(p => p.createNew && (!p.edit.brand.trim() || !p.edit.product.trim()));
+  if (incomplete.length) { $('commitStatus').textContent = incomplete.length + ' approved item(s) need a brand and product name before saving.'; return; }
   $('commitBtn').disabled = true;
   $('commitStatus').textContent = 'Saving ' + approved.length + ' items…';
   try {
@@ -379,11 +413,13 @@ $('commitBtn').addEventListener('click', async () => {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-poc-secret': $('secret').value.trim(), Authorization: 'Bearer ' + session.token },
       body: JSON.stringify({ items: approved.map(p => ({
-        key: p.key, brand: p.brand, product: p.product, variant: p.variant || null, size: p.size || null,
-        price_usd: typeof p.price_usd === 'number' ? p.price_usd : null, category: p.category || 'other',
+        key: p.key,
+        brand: p.edit.brand.trim(), product: p.edit.product.trim(), variant: p.edit.variant.trim() || null, size: p.size || null,
+        price_usd: typeof p.price_usd === 'number' ? p.price_usd : null, category: p.edit.category,
         orders: p.orders.size,
-        catalogProductId: p.match.catalog ? p.match.catalog.id : null,
-        brandId: !p.match.catalog && p.match.brand ? p.match.brand.id : null,
+        catalogProductId: !p.createNew && p.match.catalog ? p.match.catalog.id : null,
+        // Reuse the existing brand row only if the brand name wasn't changed away from it
+        brandId: p.createNew && p.match.brand && norm(p.edit.brand) === norm(p.match.brand.name) ? p.match.brand.id : null,
       })) }),
     });
     const data = await r.json();
