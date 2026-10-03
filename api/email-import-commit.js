@@ -99,7 +99,9 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
   const secret = process.env.EMAIL_IMPORT_POC_SECRET;
-  if (!secret || req.headers["x-poc-secret"] !== secret) return res.status(401).json({ error: "Unauthorized" });
+  if (!secret) return res.status(500).json({ error: "Missing EMAIL_IMPORT_POC_SECRET in Vercel for Preview. Add it and redeploy." });
+  if (req.headers["x-poc-secret"] !== secret) return res.status(401).json({ error: "Wrong POC secret" });
+  if (!process.env.SUPABASE_SERVICE_KEY) return res.status(500).json({ error: "Missing SUPABASE_SERVICE_KEY in Vercel for Preview. Tick Preview on it and redeploy." });
 
   const jwt = (req.headers.authorization || "").replace(/^Bearer /, "");
   const user = jwt && await currentUser(jwt);
@@ -107,7 +109,7 @@ export default async function handler(req, res) {
 
   try {
     const profile = await rest(`profiles?id=eq.${user.id}&select=role`);
-    if (profile[0]?.role !== "admin") return res.status(403).json({ error: "Admin only during the POC" });
+    if (profile[0]?.role !== "admin") return res.status(403).json({ error: `Your account role is "${profile[0]?.role || "none"}". Set it to admin in Supabase (see setup steps).` });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

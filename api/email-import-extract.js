@@ -130,10 +130,10 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
   const secret = process.env.EMAIL_IMPORT_POC_SECRET;
-  if (!secret || req.headers["x-poc-secret"] !== secret) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
+  if (!secret) return res.status(500).json({ error: "Missing EMAIL_IMPORT_POC_SECRET in Vercel for Preview. Add it and redeploy." });
+  if (req.headers["x-poc-secret"] !== secret) return res.status(401).json({ error: "Wrong POC secret" });
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: "Missing ANTHROPIC_API_KEY in Vercel for Preview. Add it and redeploy." });
+  if (!process.env.SUPABASE_SERVICE_KEY) return res.status(500).json({ error: "Missing SUPABASE_SERVICE_KEY in Vercel for Preview. Tick Preview on it and redeploy." });
 
   const emails = Array.isArray(req.body?.emails) ? req.body.emails.slice(0, MAX_EMAILS_PER_CALL) : [];
   if (!emails.length) return res.status(400).json({ error: "No emails" });
