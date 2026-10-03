@@ -10,6 +10,8 @@
 //   EMAIL_IMPORT_POC_SECRET   — any string; the POC page must send it (stops strangers burning API credits)
 
 const SUPABASE_URL = "https://zailubkqzouvjauodmrk.supabase.co";
+// Accept the lowercase name too (Vercel variable names are case-sensitive).
+const anthropicKey = () => (process.env.ANTHROPIC_API_KEY || process.env.anthropic_api_key || "").trim();
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_EMAILS_PER_CALL = 8;
 const MAX_CHARS_PER_EMAIL = 12000;
@@ -100,7 +102,7 @@ async function extract(email) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
+      "x-api-key": anthropicKey(),
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
@@ -132,7 +134,11 @@ export default async function handler(req, res) {
   const secret = process.env.EMAIL_IMPORT_POC_SECRET;
   if (!secret) return res.status(500).json({ error: "Missing EMAIL_IMPORT_POC_SECRET in Vercel for Preview. Add it and redeploy." });
   if (req.headers["x-poc-secret"] !== secret) return res.status(401).json({ error: "Wrong POC secret" });
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: "Missing ANTHROPIC_API_KEY in Vercel for Preview. Add it and redeploy." });
+  if (!anthropicKey()) {
+    // Diagnostics: names only, never values.
+    const seen = Object.keys(process.env).filter((k) => /anthropic|claude/i.test(k));
+    return res.status(500).json({ error: `Missing ANTHROPIC_API_KEY in Vercel for Preview. Server sees: ${seen.length ? seen.join(", ") : "no Anthropic-named variables"} (env: ${process.env.VERCEL_ENV || "?"}, branch: ${process.env.VERCEL_GIT_COMMIT_REF || "?"}).` });
+  }
   if (!process.env.SUPABASE_SERVICE_KEY) return res.status(500).json({ error: "Missing SUPABASE_SERVICE_KEY in Vercel for Preview. Tick Preview on it and redeploy." });
 
   const emails = Array.isArray(req.body?.emails) ? req.body.emails.slice(0, MAX_EMAILS_PER_CALL) : [];
